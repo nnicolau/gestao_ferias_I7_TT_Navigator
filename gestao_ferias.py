@@ -1,67 +1,78 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
+
+# Configuração inicial com verificação
 try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    st.error("A biblioteca matplotlib não está instalada. Por favor, instale com: pip install matplotlib")
-    st.stop()
-from collections import defaultdict
-
-# Configuração inicial
-st.set_page_config(page_title="Gestão de Férias", layout="wide")
-
-# Funções auxiliares
-def calcular_dias_uteis(inicio, fim):
-    try:
+    st.set_page_config(page_title="Gestão de Férias", layout="wide")
+    st.title("📅 Sistema de Gestão de Férias")
+    
+    # Verifica se as variáveis de sessão existem
+    if 'funcionarios' not in st.session_state:
+        st.session_state.funcionarios = []
+    
+    if 'ferias' not in st.session_state:
+        st.session_state.ferias = []
+    
+    # Função para calcular dias úteis
+    def calcular_dias_uteis(inicio, fim):
         dias = pd.bdate_range(start=inicio, end=fim)
         return len(dias)
-    except Exception as e:
-        st.error(f"Erro ao calcular dias úteis: {e}")
-        return 0
 
-def verificar_sobreposicao(ferias, nova_feria):
-    try:
-        inicio_novo = nova_feria['Início']
-        fim_novo = nova_feria['Fim']
-        for f in ferias:
-            if f['Funcionário'] == nova_feria['Funcionário']:
-                inicio_existente = f['Início']
-                fim_existente = f['Fim']
-                if not (fim_novo < inicio_existente or inicio_novo > fim_existente):
-                    return True
-        return False
-    except Exception as e:
-        st.error(f"Erro ao verificar sobreposição: {e}")
-        return True
+    # Menu lateral
+    with st.sidebar:
+        st.header("Configurações")
+        dias_ferias = st.number_input("Dias de férias por ano", min_value=1, value=22)
+        limite_pessoas = st.number_input("Máximo em férias simultâneas", min_value=1, value=2)
 
-def verificar_limite_pessoas(ferias, nova_feria, limite):
-    try:
-        inicio_novo = nova_feria['Início']
-        fim_novo = nova_feria['Fim']
+    # Abas principais
+    tab1, tab2 = st.tabs(["Funcionários", "Férias"])
+
+    with tab1:
+        st.header("Cadastro de Funcionários")
         
-        dias = pd.bdate_range(start=inicio_novo, end=fim_novo)
-        contagem_dias = {dia: 0 for dia in dias}
+        with st.form("novo_funcionario"):
+            nome = st.text_input("Nome completo")
+            data_admissao = st.date_input("Data de admissão")
+            if st.form_submit_button("Salvar"):
+                st.session_state.funcionarios.append({
+                    "Nome": nome,
+                    "Admissão": data_admissao,
+                    "Dias Disponíveis": dias_ferias
+                })
+                st.success("Funcionário cadastrado!")
         
-        for f in ferias:
-            if f['ID'] != nova_feria['ID']:
-                inicio_existente = f['Início']
-                fim_existente = f['Fim']
-                dias_existentes = pd.bdate_range(start=inicio_existente, end=fim_existente)
+        if st.session_state.funcionarios:
+            st.dataframe(pd.DataFrame(st.session_state.funcionarios))
+
+    with tab2:
+        st.header("Marcação de Férias")
+        
+        if st.session_state.funcionarios:
+            with st.form("marcar_ferias"):
+                funcionario = st.selectbox("Funcionário", [f["Nome"] for f in st.session_state.funcionarios])
+                data_inicio = st.date_input("Data de início")
+                data_fim = st.date_input("Data de fim")
                 
-                for dia in dias_existentes:
-                    if dia in contagem_dias:
-                        contagem_dias[dia] += 1
-        
-        for dia in dias:
-            contagem_dias[dia] += 1
-        
-        for dia, count in contagem_dias.items():
-            if count > limite:
-                return False, dia
-        return True, None
-    except Exception as e:
-        st.error(f"Erro ao verificar limite de pessoas: {e}")
-        return False, None
+                if st.form_submit_button("Marcar Férias"):
+                    if data_fim <= data_inicio:
+                        st.error("Data final deve ser após a data inicial!")
+                    else:
+                        dias = calcular_dias_uteis(data_inicio, data_fim)
+                        st.session_state.ferias.append({
+                            "Funcionário": funcionario,
+                            "Início": data_inicio,
+                            "Fim": data_fim,
+                            "Dias": dias
+                        })
+                        st.success(f"Férias marcadas! Total de dias: {dias}")
+            
+            if st.session_state.ferias:
+                st.subheader("Férias Marcadas")
+                st.dataframe(pd.DataFrame(st.session_state.ferias))
+        else:
+            st.warning("Cadastre funcionários primeiro")
 
-# Restante do código permanece igual...
+except Exception as e:
+    st.error(f"Ocorreu um erro: {str(e)}")
+    st.error("Por favor, verifique o terminal para mais detalhes.")
