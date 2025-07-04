@@ -127,11 +127,36 @@ with tab1:
                     st.success("Funcionário cadastrado com sucesso!")
                 except Error as e:
                     st.error(f"Erro ao cadastrar funcionário: {e}")
+
     if conn:
         funcionarios = pd.read_sql('SELECT * FROM funcionarios', conn)
         if not funcionarios.empty:
             st.subheader("Funcionários Cadastrados")
-            st.dataframe(funcionarios)
+            for _, row in funcionarios.iterrows():
+                with st.expander(f"{row['nome']} ({row['data_admissao']})"):
+                    with st.form(f"editar_funcionario_{row['id']}"):
+                        novo_nome = st.text_input("Nome", value=row['nome'])
+                        nova_data = st.date_input("Data de admissão", value=pd.to_datetime(row['data_admissao']))
+                        novos_dias = st.number_input("Dias de férias por ano", min_value=1, value=row['dias_ferias'])
+                        if st.form_submit_button("Atualizar"):
+                            try:
+                                cursor = conn.cursor()
+                                cursor.execute('UPDATE funcionarios SET nome = ?, data_admissao = ?, dias_ferias = ? WHERE id = ?',
+                                               (novo_nome, nova_data.isoformat(), novos_dias, row['id']))
+                                conn.commit()
+                                st.success("Funcionário atualizado!")
+                            except Error as e:
+                                st.error(f"Erro: {e}")
+                    if st.button("❌ Apagar Funcionário", key=f"apagar_func_{row['id']}"):
+                        try:
+                            cursor = conn.cursor()
+                            cursor.execute('DELETE FROM ferias WHERE funcionario_id = ?', (row['id'],))
+                            cursor.execute('DELETE FROM funcionarios WHERE id = ?', (row['id'],))
+                            conn.commit()
+                            st.success("Funcionário e suas férias foram removidos!")
+                            st.experimental_rerun()
+                        except Error as e:
+                            st.error(f"Erro: {e}")
 
 # Aba Marcar Férias
 with tab2:
@@ -139,6 +164,10 @@ with tab2:
     if conn:
         funcionarios = pd.read_sql('SELECT id, nome FROM funcionarios', conn)
         if not funcionarios.empty:
+            ferias_df = pd.read_sql('''SELECT f.id, f.funcionario_id, fu.nome, f.data_inicio, f.data_fim FROM ferias f
+                                       JOIN funcionarios fu ON f.funcionario_id = fu.id ORDER BY f.data_inicio DESC''', conn)
+
+            st.subheader("Marcar Novas Férias")
             with st.form("marcar_ferias", clear_on_submit=True):
                 funcionario_id = st.selectbox("Funcionário", funcionarios['id'],
                                               format_func=lambda x: funcionarios.loc[funcionarios['id']==x,'nome'].values[0])
@@ -162,8 +191,43 @@ with tab2:
                                                (funcionario_id, data_inicio.isoformat(), data_fim.isoformat(), dias))
                                 conn.commit()
                                 st.success("Férias marcadas com sucesso!")
+                                st.experimental_rerun()
                             except Error as e:
                                 st.error(f"Erro ao marcar férias: {e}")
+
+            st.subheader("Editar ou Remover Férias Existentes")
+            for _, row in ferias_df.iterrows():
+                with st.expander(f"{row['nome']} - {row['data_inicio']} a {row['data_fim']}"):
+                    with st.form(f"editar_ferias_{row['id']}"):
+                        novo_inicio = st.date_input("Data de início", value=pd.to_datetime(row['data_inicio']))
+                        novo_fim = st.date_input("Data de fim", value=pd.to_datetime(row['data_fim']))
+                        if st.form_submit_button("Atualizar Férias"):
+                            if novo_fim <= novo_inicio:
+                                st.error("A data final deve ser posterior à inicial!")
+                            else:
+                                dias = calcular_dias_uteis(novo_inicio, novo_fim)
+                                limite_ok, dia_problema = verificar_limite_ferias(conn, novo_inicio, novo_fim, row['funcionario_id'])
+                                if not limite_ok:
+                                    st.error(f"Limite excedido no dia {dia_problema}!")
+                                else:
+                                    try:
+                                        cursor = conn.cursor()
+                                        cursor.execute('UPDATE ferias SET data_inicio = ?, data_fim = ?, dias = ? WHERE id = ?',
+                                                       (novo_inicio.isoformat(), novo_fim.isoformat(), dias, row['id']))
+                                        conn.commit()
+                                        st.success("Férias atualizadas!")
+                                        st.experimental_rerun()
+                                    except Error as e:
+                                        st.error(f"Erro ao atualizar férias: {e}")
+                    if st.button("❌ Apagar Férias", key=f"apagar_ferias_{row['id']}"):
+                        try:
+                            cursor = conn.cursor()
+                            cursor.execute('DELETE FROM ferias WHERE id = ?', (row['id'],))
+                            conn.commit()
+                            st.success("Período de férias removido!")
+                            st.experimental_rerun()
+                        except Error as e:
+                            st.error(f"Erro ao remover férias: {e}")
 
 # Aba Consultas
 with tab3:
@@ -218,4 +282,3 @@ with tab3:
 # Fechar conexão
 if conn:
     conn.close()
-
