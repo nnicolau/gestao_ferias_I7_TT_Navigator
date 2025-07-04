@@ -239,7 +239,44 @@ with tab3:
         if not ferias.empty:
             st.dataframe(ferias)
             
-            # Gráfico de Gantt melhorado para visualizar sobreposições
+            # Gráfico de férias por mês (original)
+            st.subheader("Férias por Mês")
+            ferias['Mês'] = pd.to_datetime(ferias['Início']).dt.to_period('M')
+            ferias_por_mes = ferias.groupby('Mês').size().reset_index(name='Total')
+            ferias_por_mes['Mês'] = ferias_por_mes['Mês'].astype(str)
+            
+            fig_mes, ax_mes = plt.subplots(figsize=(10, 5))
+            ax_mes.bar(ferias_por_mes['Mês'], ferias_por_mes['Total'], color='skyblue')
+            ax_mes.set_xlabel('Mês')
+            ax_mes.set_ylabel('Número de Férias Iniciadas')
+            ax_mes.set_title('Férias por Mês')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig_mes)
+            
+            # Gráfico de dias de férias por funcionário (original)
+            st.subheader("Dias de Férias por Funcionário")
+            dias_por_funcionario = ferias.groupby('Funcionário')['Dias'].sum().reset_index()
+            
+            fig_dias, ax_dias = plt.subplots(figsize=(10, 5))
+            ax_dias.barh(dias_por_funcionario['Funcionário'], dias_por_funcionario['Dias'], color='lightgreen')
+            ax_dias.set_xlabel('Total de Dias de Férias')
+            ax_dias.set_ylabel('Funcionário')
+            ax_dias.set_title('Total de Dias de Férias por Funcionário')
+            plt.tight_layout()
+            st.pyplot(fig_dias)
+            
+            # Relatório de funcionários sem férias marcadas (original)
+            st.subheader("Funcionários Sem Férias Marcadas")
+            todos_funcionarios = pd.read_sql('SELECT id, nome FROM funcionarios', conn)
+            funcionarios_sem_ferias = todos_funcionarios[~todos_funcionarios['id'].isin(ferias['funcionario_id'])]
+            
+            if not funcionarios_sem_ferias.empty:
+                st.dataframe(funcionarios_sem_ferias[['nome']].rename(columns={'nome': 'Funcionário'}))
+            else:
+                st.info("Todos os funcionários têm férias marcadas.")
+            
+            # Gráfico de Gantt melhorado para visualizar sobreposições (NOVO)
             st.subheader("Visualização de Férias com Sobreposições")
             
             try:
