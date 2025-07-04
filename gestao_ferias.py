@@ -384,6 +384,7 @@ with tab3:
             except Exception as e:
                 st.error(f"Erro ao gerar gráfico: {str(e)}")
                 st.info("Verifique se existem dados válidos para visualização")
+                
 # Fechar conexão ao final
 if conn:
     conn.close()
