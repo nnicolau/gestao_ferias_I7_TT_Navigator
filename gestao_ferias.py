@@ -337,7 +337,9 @@ with tab2:
                 else:
                     st.info("Nenhuma férias marcada para remover.")
         else:
-            st.warning("Nenhum funcionário cadastrado. Cadastre funcionários primeiro.")with tab3:
+            st.warning("Nenhum funcionário cadastrado. Cadastre funcionários primeiro.")
+            
+    with tab3:
     st.header("Consultas e Relatórios")
     
     if conn:
