@@ -109,7 +109,7 @@ with st.sidebar:
             st.success("Configuração atualizada!")
 
 # Abas principais
-tab1, tab2, tab3 = st.tabs(["Funcionários", "Férias", "Relatórios"])
+tab1, tab2,  = st.tabs(["Funcionários", "Férias", "Relatórios"])
 
 with tab1:
     st.subheader("Gestão de Funcionários")
@@ -228,6 +228,16 @@ with tab3:
         st.subheader("📅 Próximas Férias")
         st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
 
+        # Mostrar resumo por funcionário primeiro
+        resumo = pd.read_sql('''SELECT fu.nome as Funcionário, fu.dias_ferias as "Disponível", 
+                                COALESCE(SUM(f.dias), 0) as "Usado",
+                                (fu.dias_ferias - COALESCE(SUM(f.dias), 0)) as "Restante"
+                                FROM funcionarios fu LEFT JOIN ferias f ON fu.id = f.funcionario_id
+                                GROUP BY fu.id''', conn)
+        st.subheader("Resumo por Funcionário")
+        st.dataframe(resumo)
+
+        # Agora o gráfico de sobreposição de férias
         st.subheader("📈 Sobreposição de Férias")
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
         ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim'])
@@ -289,15 +299,6 @@ with tab3:
 
         plt.tight_layout()
         st.pyplot(fig)
-
-        # Também mostrar resumo por funcionário do script1
-        resumo = pd.read_sql('''SELECT fu.nome as Funcionário, fu.dias_ferias as "Disponível", 
-                                COALESCE(SUM(f.dias), 0) as "Usado",
-                                (fu.dias_ferias - COALESCE(SUM(f.dias), 0)) as "Restante"
-                                FROM funcionarios fu LEFT JOIN ferias f ON fu.id = f.funcionario_id
-                                GROUP BY fu.id''', conn)
-        st.subheader("Resumo por Funcionário")
-        st.dataframe(resumo)
 
     else:
         st.info("Nenhuma férias marcada para mostrar.")
