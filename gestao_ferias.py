@@ -330,7 +330,7 @@ with tab2:
             st.warning("Nenhum funcionário cadastrado. Cadastre funcionários primeiro.")            
    
     with tab3:
-    st.header("Consultas e Relatórios")
+        st.header("Consultas e Relatórios")
     
     if conn:
         st.subheader("Férias Marcadas")
