@@ -147,7 +147,7 @@ with st.sidebar:
             st.success("Configuração atualizada!")
 
 # Abas principais
-tab1, , tab3  = st.tabs(["Funcionários", "Marcar Férias", "Consultas"])
+tab1, tab2 , tab3  = st.tabs(["Funcionários", "Marcar Férias", "Consultas"])
 
 # [...] (mantenha todas as importações e configurações iniciais iguais)
 
