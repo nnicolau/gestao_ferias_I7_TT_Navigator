@@ -9,7 +9,7 @@ import matplotlib.dates as mdates
 # Configuração inicial
 st.set_page_config(page_title="Gestão de Férias", layout="wide")
 st.image("Logotipo.png", width=100)
-st.title("🗕️ Sistema de Gestão de Férias - INDICA7")
+st.title("📅 Sistema de Gestão de Férias - INDICA7")
 
 # Função para criar/conectar ao banco de dados
 def criar_conexao():
@@ -220,15 +220,19 @@ with tab3:
                                ORDER BY f.data_inicio''', conn)
 
     if not ferias_df.empty:
-        hoje = datetime.now().date()
-        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio']).dt.date
-        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim']).dt.date
+        # Tabela Férias Marcadas (todas)
+        st.subheader("📋 Férias Marcadas")
+        ferias_df_display = ferias_df.copy()
+        ferias_df_display['data_inicio'] = pd.to_datetime(ferias_df_display['data_inicio']).dt.date
+        ferias_df_display['data_fim'] = pd.to_datetime(ferias_df_display['data_fim']).dt.date
+        st.dataframe(ferias_df_display[['funcionario', 'data_inicio', 'data_fim', 'dias']])
 
+        hoje = datetime.now().date()
         proximas = ferias_df[ferias_df['data_inicio'] >= hoje]
         st.subheader("📅 Próximas Férias")
         st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
 
-        # Mostrar resumo por funcionário primeiro
+        # Mostrar resumo por funcionário
         resumo = pd.read_sql('''SELECT fu.nome as Funcionário, fu.dias_ferias as "Disponível", 
                                 COALESCE(SUM(f.dias), 0) as "Usado",
                                 (fu.dias_ferias - COALESCE(SUM(f.dias), 0)) as "Restante"
@@ -237,7 +241,7 @@ with tab3:
         st.subheader("Resumo por Funcionário")
         st.dataframe(resumo)
 
-        # Agora o gráfico de sobreposição de férias
+        # Gráfico de sobreposição
         st.subheader("📈 Sobreposição de Férias")
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
         ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim'])
