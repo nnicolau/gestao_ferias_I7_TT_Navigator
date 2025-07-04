@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime
 import sqlite3
 from sqlite3 import Error
+import matplotlib.pyplot as plt
 
 # Configuração inicial
 st.set_page_config(page_title="Gestão de Férias", layout="wide")
