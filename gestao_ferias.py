@@ -218,7 +218,43 @@ with tab2:
             tab_marcar, tab_editar = st.tabs(["Marcar Novas Férias", "Editar/Remover Férias Existentes"])
             
             with tab_marcar:
-                # ... (mantenha o conteúdo existente da aba marcar) ...
+                 with st.form("marcar_ferias", clear_on_submit=True):
+                    funcionario_id = st.selectbox(
+                        "Funcionário",
+                        funcionarios['id'],
+                        format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0],
+                        key="select_funcionario_novo"
+                    )
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        data_inicio = st.date_input("Data de início", key="data_inicio_novo")
+                    with col2:
+                        data_fim = st.date_input("Data de fim", key="data_fim_novo")
+                    
+                    if st.form_submit_button("Marcar Férias"):
+                        if data_fim <= data_inicio:
+                            st.error("A data final deve ser posterior à data inicial!")
+                        else:
+                            dias = calcular_dias_uteis(data_inicio, data_fim)
+                            
+                            limite_ok, dia_problema = verificar_limite_ferias(
+                                conn, data_inicio, data_fim, funcionario_id
+                            )
+                            
+                            if not limite_ok:
+                                st.error(f"Limite de férias simultâneas excedido no dia {dia_problema}!")
+                            else:
+                                try:
+                                    cursor = conn.cursor()
+                                    cursor.execute(
+                                        'INSERT INTO ferias (funcionario_id, data_inicio, data_fim, dias) VALUES (?, ?, ?, ?)',
+                                        (funcionario_id, data_inicio.isoformat(), data_fim.isoformat(), dias)
+                                    )
+                                    conn.commit()
+                                    st.success(f"Férias marcadas com sucesso! Total de dias: {dias}")
+                                except Error as e:
+                                    st.error(f"Erro ao marcar férias: {e}")
             
             with tab_editar:
                 ferias_para_editar = pd.read_sql('''
