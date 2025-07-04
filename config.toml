@@ -1,0 +1,4 @@
+[server]
+enableCORS = false
+enableXsrfProtection = true
+maxUploadSize = 10  # Em MB
