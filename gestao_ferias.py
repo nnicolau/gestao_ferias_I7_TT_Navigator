@@ -214,22 +214,23 @@ with tab2:
         funcionarios = pd.read_sql('SELECT id, nome FROM funcionarios', conn)
         
         if not funcionarios.empty:
-            # Abas para marcar e editar férias
-            tab_marcar, tab_editar = st.tabs(["Marcar Novas Férias", "Editar Férias Existentes"])
+            # Abas para marcar, editar e remover férias
+            tab_marcar, tab_editar, tab_remover = st.tabs(["Marcar Novas Férias", "Editar Férias Existentes", "Remover Férias"])
             
             with tab_marcar:
                 with st.form("marcar_ferias", clear_on_submit=True):
                     funcionario_id = st.selectbox(
                         "Funcionário",
                         funcionarios['id'],
-                        format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0]
+                        format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0],
+                        key="select_funcionario_novo"
                     )
                     
                     col1, col2 = st.columns(2)
                     with col1:
-                        data_inicio = st.date_input("Data de início")
+                        data_inicio = st.date_input("Data de início", key="data_inicio_novo")
                     with col2:
-                        data_fim = st.date_input("Data de fim")
+                        data_fim = st.date_input("Data de fim", key="data_fim_novo")
                     
                     if st.form_submit_button("Marcar Férias"):
                         if data_fim <= data_inicio:
@@ -304,11 +305,39 @@ with tab2:
                                             st.error(f"Erro ao atualizar férias: {e}")
                 else:
                     st.info("Nenhuma férias marcada para editar.")
+            
+            with tab_remover:
+                ferias_para_remover = pd.read_sql('''
+                SELECT f.id, fu.nome as Funcionário, f.data_inicio as Início, f.data_fim as Fim 
+                FROM ferias f
+                JOIN funcionarios fu ON f.funcionario_id = fu.id
+                ORDER BY f.data_inicio DESC
+                ''', conn)
+                
+                if not ferias_para_remover.empty:
+                    st.warning("Cuidado: A remoção de férias é permanente e não pode ser desfeita!")
+                    
+                    for _, ferias in ferias_para_remover.iterrows():
+                        with st.container(border=True):
+                            col1, col2 = st.columns([4,1])
+                            with col1:
+                                st.write(f"**{ferias['Funcionário']}**")
+                                st.write(f"Período: {ferias['Início']} a {ferias['Fim']}")
+                            
+                            with col2:
+                                if st.button("Remover", key=f"remover_{ferias['id']}"):
+                                    try:
+                                        cursor = conn.cursor()
+                                        cursor.execute('DELETE FROM ferias WHERE id = ?', (ferias['id'],))
+                                        conn.commit()
+                                        st.success(f"Férias removidas com sucesso para {ferias['Funcionário']}!")
+                                        st.rerun()  # Atualiza a lista após remoção
+                                    except Error as e:
+                                        st.error(f"Erro ao remover férias: {e}")
+                else:
+                    st.info("Nenhuma férias marcada para remover.")
         else:
-            st.warning("Nenhum funcionário cadastrado. Cadastre funcionários primeiro.")
-
-# [...] (mantenha o restante do código igual, incluindo a tab3 e o fechamento da conexão)
-with tab3:
+            st.warning("Nenhum funcionário cadastrado. Cadastre funcionários primeiro.")with tab3:
     st.header("Consultas e Relatórios")
     
     if conn:
