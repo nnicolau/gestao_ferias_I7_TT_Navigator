@@ -239,59 +239,110 @@ with tab3:
         if not ferias.empty:
             st.dataframe(ferias)
             
-            # Gráfico de Gantt para visualizar sobreposições
-            st.subheader("Visualização de Férias (Gráfico de Gantt)")
+            # Gráfico de Gantt melhorado para visualizar sobreposições
+            st.subheader("Visualização de Férias com Sobreposições")
             
             try:
-                # Criar figura
-                fig, ax = plt.subplots(figsize=(12, 8))
+                # Criar figura maior
+                fig, ax = plt.subplots(figsize=(15, 10))
                 
-                # Converter datas para formato numérico que o matplotlib pode entender
-                ferias['Início_num'] = ferias['Início'].apply(lambda x: datetime.toordinal(x))
-                ferias['Fim_num'] = ferias['Fim'].apply(lambda x: datetime.toordinal(x))
+                # Converter datas para datetime
+                ferias['Início'] = pd.to_datetime(ferias['Início'])
+                ferias['Fim'] = pd.to_datetime(ferias['Fim'])
                 
-                # Calcular duração
-                ferias['Duração'] = ferias['Fim_num'] - ferias['Início_num']
+                # Calcular duração em dias
+                ferias['Duração'] = (ferias['Fim'] - ferias['Início']).dt.days + 1
+                
+                # Ordenar por data de início
+                ferias = ferias.sort_values('Início')
+                
+                # Criar lista de cores para as barras
+                cores = plt.cm.tab20.colors
                 
                 # Criar barras para cada funcionário
                 for i, (_, row) in enumerate(ferias.iterrows()):
+                    # Usar cor diferente para cada funcionário
+                    cor = cores[i % len(cores)]
+                    
                     ax.barh(
                         y=row['Funcionário'],
                         width=row['Duração'],
-                        left=row['Início_num'],
+                        left=row['Início'],
                         edgecolor='black',
-                        alpha=0.6
+                        alpha=0.7,
+                        color=cor,
+                        label=row['Funcionário']
                     )
                     
-                    # Adicionar texto com a duração
+                    # Adicionar texto com informações
                     ax.text(
-                        x=row['Início_num'] + row['Duração']/2,
+                        x=row['Início'] + pd.Timedelta(days=row['Duração']/2),
                         y=row['Funcionário'],
-                        s=f"{row['Dias']} dias",
+                        s=f"{row['Dias']} dias\n({row['Início'].strftime('%d/%m')}-{row['Fim'].strftime('%d/%m')})",
                         va='center',
                         ha='center',
-                        color='black'
+                        color='black',
+                        fontsize=9
                     )
                 
-                # Configurar eixos
-                ax.set_xlabel('Data')
-                ax.set_ylabel('Funcionário')
-                ax.set_title('Períodos de Férias por Funcionário')
+                # Configurar eixos e título
+                ax.set_xlabel('Período', fontsize=12)
+                ax.set_ylabel('Funcionário', fontsize=12)
+                ax.set_title('Períodos de Férias com Sobreposições', fontsize=14, pad=20)
                 
                 # Formatar eixo x para mostrar datas
-                date_min = ferias['Início_num'].min() - 5
-                date_max = ferias['Fim_num'].max() + 5
+                ax.xaxis_date()
+                
+                # Ajustar limites do eixo x com margem
+                date_min = ferias['Início'].min() - pd.Timedelta(days=5)
+                date_max = ferias['Fim'].max() + pd.Timedelta(days=5)
                 ax.set_xlim(date_min, date_max)
                 
-                # Converter números de volta para datas
-                ax.xaxis_date()
-                fig.autofmt_xdate()
+                # Rotacionar datas no eixo x para melhor visualização
+                fig.autofmt_xdate(rotation=45)
                 
-                # Melhorar layout
-                plt.grid(axis='x', alpha=0.3)
+                # Adicionar grid e melhorar layout
+                ax.grid(axis='x', alpha=0.3)
+                ax.grid(axis='y', alpha=0.3)
+                
+                # Adicionar legenda se não houver muitos funcionários
+                if len(ferias['Funcionário'].unique()) <= 20:
+                    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                
+                # Destacar sobreposições
+                for i, (_, row1) in enumerate(ferias.iterrows()):
+                    for j, (_, row2) in enumerate(ferias.iterrows()):
+                        if i < j:  # Evitar comparações duplicadas
+                            # Verificar sobreposição
+                            inicio_max = max(row1['Início'], row2['Início'])
+                            fim_min = min(row1['Fim'], row2['Fim'])
+                            
+                            if inicio_max < fim_min:  # Há sobreposição
+                                # Calcular período de sobreposição
+                                sobreposicao_inicio = inicio_max
+                                sobreposicao_fim = fim_min
+                                duracao_sobreposicao = (sobreposicao_fim - sobreposicao_inicio).days + 1
+                                
+                                # Adicionar marcação de sobreposição
+                                ax.barh(
+                                    y=[row1['Funcionário'], row2['Funcionário']],
+                                    width=duracao_sobreposicao,
+                                    left=sobreposicao_inicio,
+                                    color='red',
+                                    alpha=0.3,
+                                    edgecolor='none'
+                                )
+                
                 plt.tight_layout()
-                
                 st.pyplot(fig)
+                
+                # Adicionar explicação sobre as sobreposições
+                st.info("""
+                **Legenda do Gráfico:**
+                - Cada barra representa o período de férias de um funcionário
+                - As áreas em vermelho indicam períodos onde há sobreposição de férias entre funcionários
+                - O texto no centro de cada barra mostra o total de dias e as datas de início/fim
+                """)
                 
             except Exception as e:
                 st.error(f"Erro ao gerar gráfico: {str(e)}")
