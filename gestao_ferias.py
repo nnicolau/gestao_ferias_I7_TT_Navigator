@@ -4,6 +4,7 @@ from datetime import datetime
 import sqlite3
 from sqlite3 import Error
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 # Configuração inicial
 st.set_page_config(page_title="Gestão de Férias", layout="wide")
@@ -146,7 +147,7 @@ with st.sidebar:
             st.success("Configuração atualizada!")
 
 # Abas principais
-tab1, tab2, tab3 = st.tabs(["Funcionários", "Marcar Férias", "Consultas"])
+tab1, tab2,  = st.tabs(["Funcionários", "Marcar Férias", "Consultas"])
 
 with tab1:
     st.header("Gestão de Funcionários")
