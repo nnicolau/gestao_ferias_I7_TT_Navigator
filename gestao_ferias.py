@@ -330,7 +330,7 @@ with tab2:
             st.warning("Nenhum funcionário cadastrado. Cadastre funcionários primeiro.")            
    
     with tab3:
-        st.header("Consultas e Relatórios")
+    st.header("Consultas e Relatórios")
     
     if conn:
         st.subheader("Férias Marcadas")
@@ -369,33 +369,24 @@ with tab2:
             ''', conn)
             st.dataframe(proximas)
             
-            # Gráfico de Gantt otimizado para mostrar sobreposições
+            # Gráfico de Gantt
             st.subheader("Sobreposição de Férias")
-            
-            # Preparar dados
             ferias['Início'] = pd.to_datetime(ferias['Início'])
             ferias['Fim'] = pd.to_datetime(ferias['Fim'])
-            
-            # Criar figura
             fig, ax = plt.subplots(figsize=(14, 6))
             
-            # Calcular sobreposições
             all_dates = pd.date_range(
                 start=ferias['Início'].min(),
                 end=ferias['Fim'].max()
             )
-            
             congestion = pd.Series(0, index=all_dates)
             for _, row in ferias.iterrows():
                 mask = (all_dates >= row['Início']) & (all_dates <= row['Fim'])
                 congestion[mask] += 1
             
-            # Plotar cada período com cor baseada na sobreposição
             for _, row in ferias.iterrows():
                 overlap_days = congestion.loc[row['Início']:row['Fim']]
                 avg_overlap = overlap_days.mean()
-                
-                # Cores: verde (1), amarelo (2), vermelho (3+)
                 color = 'green' if avg_overlap < 1.5 else 'goldenrod' if avg_overlap < 2.5 else 'red'
                 
                 ax.barh(
@@ -407,10 +398,9 @@ with tab2:
                     alpha=0.7
                 )
                 
-                # Mostrar número de sobreposições
                 if avg_overlap > 1:
                     ax.text(
-                        x=row['Início'] + (row['Fim'] - row['Início'])/2,
+                        x=row['Início'] + (row['Fim'] - row['Início']) / 2,
                         y=row['Funcionário'],
                         s=f"{int(round(avg_overlap))}",
                         va='center',
@@ -421,34 +411,27 @@ with tab2:
                         bbox=dict(facecolor='white', alpha=0.8, edgecolor='none')
                     )
             
-            # Destacar períodos problemáticos
             high_congestion = congestion[congestion >= 3]
             for date in high_congestion.index:
                 ax.axvline(x=date, color='darkred', alpha=0.3, linestyle='--')
             
-            # Configurações do gráfico
             ax.set_xlabel('Data')
             ax.set_ylabel('Funcionário')
             ax.set_title('Períodos de Férias - Sobreposições Destacadas', pad=15)
-            
-            # Formatar datas
             ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO))
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
             plt.xticks(rotation=45)
-            
-            # Adicionar legenda simplificada
             legend_elements = [
-                plt.Rectangle((0,0),1,1, color='green', label='Sem sobreposição'),
-                plt.Rectangle((0,0),1,1, color='goldenrod', label='2 pessoas'),
-                plt.Rectangle((0,0),1,1, color='red', label='3+ pessoas')
+                plt.Rectangle((0, 0), 1, 1, color='green', label='Sem sobreposição'),
+                plt.Rectangle((0, 0), 1, 1, color='goldenrod', label='2 pessoas'),
+                plt.Rectangle((0, 0), 1, 1, color='red', label='3+ pessoas')
             ]
             ax.legend(handles=legend_elements, loc='upper right', title="Sobreposições")
-            
             plt.tight_layout()
             st.pyplot(fig)
-            
         else:
-            st.info("Nenhuma férias marcada ainda.")             
+            st.info("Nenhuma férias marcada ainda.")
+             
             
 # Fechar conexão ao final
 if conn:
