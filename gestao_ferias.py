@@ -8,7 +8,7 @@ import matplotlib.dates as mdates
 
 # Configuração inicial
 st.set_page_config(page_title="Gestão de Férias", layout="wide")
-st.title("📅 Sistema de Gestão de Férias")
+st.title("📅 Sistema de Gestão de Férias - INDICA7")
 
 # Função para criar/conectar ao banco de dados
 def criar_conexao():
@@ -149,6 +149,8 @@ with st.sidebar:
 # Abas principais
 tab1, tab2, tab3  = st.tabs(["Funcionários", "Marcar Férias", "Consultas"])
 
+# [...] (mantenha todas as importações e configurações iniciais iguais)
+
 with tab1:
     st.header("Gestão de Funcionários")
     
@@ -176,6 +178,33 @@ with tab1:
         funcionarios = pd.read_sql('SELECT * FROM funcionarios', conn)
         if not funcionarios.empty:
             st.subheader("Funcionários Cadastrados")
+            
+            # Adicionar opção de edição
+            with st.expander("Editar Funcionários"):
+                for _, func in funcionarios.iterrows():
+                    with st.form(f"editar_func_{func['id']}"):
+                        st.write(f"**{func['nome']}**")
+                        novo_nome = st.text_input("Nome", value=func['nome'], key=f"nome_{func['id']}")
+                        nova_data = st.date_input("Data Admissão", 
+                                                value=pd.to_datetime(func['data_admissao']), 
+                                                key=f"data_{func['id']}")
+                        novos_dias = st.number_input("Dias de Férias", 
+                                                    min_value=1, 
+                                                    value=func['dias_ferias'], 
+                                                    key=f"dias_{func['id']}")
+                        
+                        if st.form_submit_button(f"Atualizar {func['nome']}"):
+                            try:
+                                cursor = conn.cursor()
+                                cursor.execute(
+                                    'UPDATE funcionarios SET nome = ?, data_admissao = ?, dias_ferias = ? WHERE id = ?',
+                                    (novo_nome, nova_data.isoformat(), novos_dias, func['id'])
+                                )
+                                conn.commit()
+                                st.success(f"Dados de {func['nome']} atualizados!")
+                            except Error as e:
+                                st.error(f"Erro ao atualizar funcionário: {e}")
+            
             st.dataframe(funcionarios)
 
 with tab2:
@@ -185,46 +214,100 @@ with tab2:
         funcionarios = pd.read_sql('SELECT id, nome FROM funcionarios', conn)
         
         if not funcionarios.empty:
-            with st.form("marcar_ferias", clear_on_submit=True):
-                funcionario_id = st.selectbox(
-                    "Funcionário",
-                    funcionarios['id'],
-                    format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0]
-                )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    data_inicio = st.date_input("Data de início")
-                with col2:
-                    data_fim = st.date_input("Data de fim")
-                
-                if st.form_submit_button("Marcar Férias"):
-                    if data_fim <= data_inicio:
-                        st.error("A data final deve ser posterior à data inicial!")
-                    else:
-                        dias = calcular_dias_uteis(data_inicio, data_fim)
-                        
-                        # Verificar limite de pessoas em férias
-                        limite_ok, dia_problema = verificar_limite_ferias(
-                            conn, data_inicio, data_fim, funcionario_id
-                        )
-                        
-                        if not limite_ok:
-                            st.error(f"Limite de férias simultâneas excedido no dia {dia_problema}!")
+            # Abas para marcar e editar férias
+            tab_marcar, tab_editar = st.tabs(["Marcar Novas Férias", "Editar Férias Existentes"])
+            
+            with tab_marcar:
+                with st.form("marcar_ferias", clear_on_submit=True):
+                    funcionario_id = st.selectbox(
+                        "Funcionário",
+                        funcionarios['id'],
+                        format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0]
+                    )
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        data_inicio = st.date_input("Data de início")
+                    with col2:
+                        data_fim = st.date_input("Data de fim")
+                    
+                    if st.form_submit_button("Marcar Férias"):
+                        if data_fim <= data_inicio:
+                            st.error("A data final deve ser posterior à data inicial!")
                         else:
-                            try:
-                                cursor = conn.cursor()
-                                cursor.execute(
-                                    'INSERT INTO ferias (funcionario_id, data_inicio, data_fim, dias) VALUES (?, ?, ?, ?)',
-                                    (funcionario_id, data_inicio.isoformat(), data_fim.isoformat(), dias)
-                                )
-                                conn.commit()
-                                st.success(f"Férias marcadas com sucesso! Total de dias: {dias}")
-                            except Error as e:
-                                st.error(f"Erro ao marcar férias: {e}")
+                            dias = calcular_dias_uteis(data_inicio, data_fim)
+                            
+                            limite_ok, dia_problema = verificar_limite_ferias(
+                                conn, data_inicio, data_fim, funcionario_id
+                            )
+                            
+                            if not limite_ok:
+                                st.error(f"Limite de férias simultâneas excedido no dia {dia_problema}!")
+                            else:
+                                try:
+                                    cursor = conn.cursor()
+                                    cursor.execute(
+                                        'INSERT INTO ferias (funcionario_id, data_inicio, data_fim, dias) VALUES (?, ?, ?, ?)',
+                                        (funcionario_id, data_inicio.isoformat(), data_fim.isoformat(), dias)
+                                    )
+                                    conn.commit()
+                                    st.success(f"Férias marcadas com sucesso! Total de dias: {dias}")
+                                except Error as e:
+                                    st.error(f"Erro ao marcar férias: {e}")
+            
+            with tab_editar:
+                ferias_para_editar = pd.read_sql('''
+                SELECT f.id, fu.nome as Funcionário, f.data_inicio as Início, f.data_fim as Fim 
+                FROM ferias f
+                JOIN funcionarios fu ON f.funcionario_id = fu.id
+                ORDER BY f.data_inicio
+                ''', conn)
+                
+                if not ferias_para_editar.empty:
+                    for _, ferias in ferias_para_editar.iterrows():
+                        with st.form(f"editar_ferias_{ferias['id']}"):
+                            st.write(f"**{ferias['Funcionário']}** - De {ferias['Início']} a {ferias['Fim']}")
+                            
+                            novo_inicio = st.date_input("Novo início", 
+                                                      value=pd.to_datetime(ferias['Início']), 
+                                                      key=f"inicio_{ferias['id']}")
+                            novo_fim = st.date_input("Novo fim", 
+                                                   value=pd.to_datetime(ferias['Fim']), 
+                                                   key=f"fim_{ferias['id']}")
+                            
+                            if st.form_submit_button(f"Atualizar Férias"):
+                                if novo_fim <= novo_inicio:
+                                    st.error("A data final deve ser posterior à data inicial!")
+                                else:
+                                    dias = calcular_dias_uteis(novo_inicio, novo_fim)
+                                    
+                                    # Obter ID do funcionário
+                                    cursor = conn.cursor()
+                                    cursor.execute('SELECT funcionario_id FROM ferias WHERE id = ?', (ferias['id'],))
+                                    func_id = cursor.fetchone()[0]
+                                    
+                                    limite_ok, dia_problema = verificar_limite_ferias(
+                                        conn, novo_inicio, novo_fim, func_id
+                                    )
+                                    
+                                    if not limite_ok:
+                                        st.error(f"Limite de férias simultâneas excedido no dia {dia_problema}!")
+                                    else:
+                                        try:
+                                            cursor.execute(
+                                                'UPDATE ferias SET data_inicio = ?, data_fim = ?, dias = ? WHERE id = ?',
+                                                (novo_inicio.isoformat(), novo_fim.isoformat(), dias, ferias['id'])
+                                            )
+                                            conn.commit()
+                                            st.success("Férias atualizadas com sucesso!")
+                                        except Error as e:
+                                            st.error(f"Erro ao atualizar férias: {e}")
+                else:
+                    st.info("Nenhuma férias marcada para editar.")
         else:
             st.warning("Nenhum funcionário cadastrado. Cadastre funcionários primeiro.")
 
+# [...] (mantenha o restante do código igual, incluindo a tab3 e o fechamento da conexão)
 with tab3:
     st.header("Consultas e Relatórios")
     
