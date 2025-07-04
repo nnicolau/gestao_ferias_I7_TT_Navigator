@@ -238,18 +238,75 @@ with tab3:
         if not ferias.empty:
             st.dataframe(ferias)
             
+            # Novo gráfico de calendário visual
+            st.subheader("Calendário de Férias")
+            
+            # Criar dataframe para o calendário
+            calendario = []
+            for _, row in ferias.iterrows():
+                dias = pd.date_range(start=row['Início'], end=row['Fim'], freq='D')
+                for dia in dias:
+                    calendario.append({
+                        'Data': dia.date(),
+                        'Funcionário': row['Funcionário'],
+                        'Dias': row['Dias']
+                    })
+            
+            df_calendario = pd.DataFrame(calendario)
+            
+            # Converter para wide format para o heatmap
+            heatmap_data = df_calendario.pivot_table(
+                index='Funcionário',
+                columns='Data',
+                values='Dias',
+                aggfunc='count',
+                fill_value=0
+            )
+            
+            # Ordenar por data
+            heatmap_data = heatmap_data.reindex(sorted(heatmap_data.columns), axis=1)
+            
+            # Plotar heatmap
+            fig, ax = plt.subplots(figsize=(12, 6))
+            cax = ax.matshow(heatmap_data, cmap='YlGn')
+            
+            # Configurações do gráfico
+            ax.set_xticks(range(len(heatmap_data.columns)))
+            ax.set_yticks(range(len(heatmap_data.index)))
+            ax.set_xticklabels([d.strftime('%d/%m') for d in heatmap_data.columns], rotation=90)
+            ax.set_yticklabels(heatmap_data.index)
+            
+            # Adicionar barra de cores
+            plt.colorbar(cax, label='Número de dias')
+            plt.title('Calendário de Férias por Funcionário')
+            plt.tight_layout()
+            
+            st.pyplot(fig)
+            
             st.subheader("Resumo por Funcionário")
             resumo = pd.read_sql('''
             SELECT 
                 fu.nome as Funcionário,
                 fu.dias_ferias as "Dias Disponíveis",
                 COALESCE(SUM(f.dias), 0) as "Dias Usados",
-                fu.dias_ferias - COALESCE(SUM(f.dias), 0) as "Dias Restantes"
+                (fu.dias_ferias - COALESCE(SUM(f.dias), 0)) as "Dias Restantes"
             FROM funcionarios fu
             LEFT JOIN ferias f ON fu.id = f.funcionario_id
             GROUP BY fu.id, fu.nome, fu.dias_ferias
             ''', conn)
-            st.dataframe(resumo)
+            
+            # Gráfico de barras para dias de férias
+            fig2, ax2 = plt.subplots(figsize=(10, 6))
+            resumo.set_index('Funcionário')[['Dias Usados', 'Dias Restantes']].plot(
+                kind='barh', 
+                stacked=True, 
+                ax=ax2,
+                color=['#FFA07A', '#98FB98']
+            )
+            ax2.set_title('Dias de Férias por Funcionário')
+            ax2.set_xlabel('Dias')
+            plt.tight_layout()
+            st.pyplot(fig2)
             
             st.subheader("Próximas Férias")
             hoje = datetime.now().date().isoformat()
@@ -262,9 +319,24 @@ with tab3:
             LIMIT 5
             ''', conn)
             st.dataframe(proximas)
+            
+            # Novo gráfico de distribuição mensal
+            st.subheader("Distribuição Mensal de Férias")
+            ferias['Mês'] = pd.to_datetime(ferias['Início']).dt.to_period('M')
+            mensal = ferias.groupby('Mês')['Dias'].sum().reset_index()
+            mensal['Mês'] = mensal['Mês'].dt.strftime('%Y-%m')
+            
+            fig3, ax3 = plt.subplots(figsize=(10, 4))
+            ax3.bar(mensal['Mês'], mensal['Dias'], color='skyblue')
+            ax3.set_title('Total de Dias de Férias por Mês')
+            ax3.set_xlabel('Mês')
+            ax3.set_ylabel('Dias de Férias')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            st.pyplot(fig3)
+            
         else:
             st.info("Nenhuma férias marcada ainda.")
-
 # Fechar conexão ao final
 if conn:
     conn.close()
