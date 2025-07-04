@@ -5,6 +5,39 @@ import sqlite3
 from sqlite3 import Error
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+import hashlib
+import bcrypt
+
+
+# Configuração de segurança
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    st.warning("dotenv não está instalado. Usando variáveis padrão.")
+
+# Configurações de segurança
+SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key-123')
+PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
+
+# Função de autenticação
+def check_password():
+    """Verifica se o usuário digitou a senha correta."""
+    if 'authenticated' in st.session_state and st.session_state.authenticated:
+        return True
+    
+    password = st.text_input("Senha de acesso", type="password", key="password_input")
+    
+    if password:
+        if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("Senha incorreta")
+    
+    return False
+
+
 
 # Configuração inicial
 st.set_page_config(page_title="Gestão de Férias", layout="wide")
