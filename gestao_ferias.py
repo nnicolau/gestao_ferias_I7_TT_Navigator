@@ -239,105 +239,63 @@ with tab3:
         if not ferias.empty:
             st.dataframe(ferias)
             
-            # Novo gráfico de calendário visual
-            st.subheader("Calendário de Férias")
+            # Gráfico de Gantt para visualizar sobreposições
+            st.subheader("Visualização de Férias (Gráfico de Gantt)")
             
-            # Criar dataframe para o calendário
-            calendario = []
-            for _, row in ferias.iterrows():
-                dias = pd.date_range(start=row['Início'], end=row['Fim'], freq='D')
-                for dia in dias:
-                    calendario.append({
-                        'Data': dia.date(),
-                        'Funcionário': row['Funcionário'],
-                        'Dias': row['Dias']
-                    })
-            
-            df_calendario = pd.DataFrame(calendario)
-            
-            # Converter para wide format para o heatmap
-            heatmap_data = df_calendario.pivot_table(
-                index='Funcionário',
-                columns='Data',
-                values='Dias',
-                aggfunc='count',
-                fill_value=0
-            )
-            
-            # Ordenar por data
-            heatmap_data = heatmap_data.reindex(sorted(heatmap_data.columns), axis=1)
-            
-            # Plotar heatmap
-            fig, ax = plt.subplots(figsize=(12, 6))
-            cax = ax.matshow(heatmap_data, cmap='YlGn')
-            
-            # Configurações do gráfico
-            ax.set_xticks(range(len(heatmap_data.columns)))
-            ax.set_yticks(range(len(heatmap_data.index)))
-            ax.set_xticklabels([d.strftime('%d/%m') for d in heatmap_data.columns], rotation=90)
-            ax.set_yticklabels(heatmap_data.index)
-            
-            # Adicionar barra de cores
-            plt.colorbar(cax, label='Número de dias')
-            plt.title('Calendário de Férias por Funcionário')
-            plt.tight_layout()
-            
-            st.pyplot(fig)
-            
-            st.subheader("Resumo por Funcionário")
-            resumo = pd.read_sql('''
-            SELECT 
-                fu.nome as Funcionário,
-                fu.dias_ferias as "Dias Disponíveis",
-                COALESCE(SUM(f.dias), 0) as "Dias Usados",
-                (fu.dias_ferias - COALESCE(SUM(f.dias), 0)) as "Dias Restantes"
-            FROM funcionarios fu
-            LEFT JOIN ferias f ON fu.id = f.funcionario_id
-            GROUP BY fu.id, fu.nome, fu.dias_ferias
-            ''', conn)
-            
-            # Gráfico de barras para dias de férias
-            fig2, ax2 = plt.subplots(figsize=(10, 6))
-            resumo.set_index('Funcionário')[['Dias Usados', 'Dias Restantes']].plot(
-                kind='barh', 
-                stacked=True, 
-                ax=ax2,
-                color=['#FFA07A', '#98FB98']
-            )
-            ax2.set_title('Dias de Férias por Funcionário')
-            ax2.set_xlabel('Dias')
-            plt.tight_layout()
-            st.pyplot(fig2)
-            
-            st.subheader("Próximas Férias")
-            hoje = datetime.now().date().isoformat()
-            proximas = pd.read_sql(f'''
-            SELECT fu.nome as Funcionário, f.data_inicio as Início, f.data_fim as Fim
-            FROM ferias f
-            JOIN funcionarios fu ON f.funcionario_id = fu.id
-            WHERE f.data_inicio >= '{hoje}'
-            ORDER BY f.data_inicio
-            LIMIT 5
-            ''', conn)
-            st.dataframe(proximas)
-            
-            # Novo gráfico de distribuição mensal
-            st.subheader("Distribuição Mensal de Férias")
-            ferias['Mês'] = pd.to_datetime(ferias['Início']).dt.to_period('M')
-            mensal = ferias.groupby('Mês')['Dias'].sum().reset_index()
-            mensal['Mês'] = mensal['Mês'].dt.strftime('%Y-%m')
-            
-            fig3, ax3 = plt.subplots(figsize=(10, 4))
-            ax3.bar(mensal['Mês'], mensal['Dias'], color='skyblue')
-            ax3.set_title('Total de Dias de Férias por Mês')
-            ax3.set_xlabel('Mês')
-            ax3.set_ylabel('Dias de Férias')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            st.pyplot(fig3)
-            
-        else:
-            st.info("Nenhuma férias marcada ainda.")
+            try:
+                # Criar figura
+                fig, ax = plt.subplots(figsize=(12, 8))
+                
+                # Converter datas para formato numérico que o matplotlib pode entender
+                ferias['Início_num'] = ferias['Início'].apply(lambda x: datetime.toordinal(x))
+                ferias['Fim_num'] = ferias['Fim'].apply(lambda x: datetime.toordinal(x))
+                
+                # Calcular duração
+                ferias['Duração'] = ferias['Fim_num'] - ferias['Início_num']
+                
+                # Criar barras para cada funcionário
+                for i, (_, row) in enumerate(ferias.iterrows()):
+                    ax.barh(
+                        y=row['Funcionário'],
+                        width=row['Duração'],
+                        left=row['Início_num'],
+                        edgecolor='black',
+                        alpha=0.6
+                    )
+                    
+                    # Adicionar texto com a duração
+                    ax.text(
+                        x=row['Início_num'] + row['Duração']/2,
+                        y=row['Funcionário'],
+                        s=f"{row['Dias']} dias",
+                        va='center',
+                        ha='center',
+                        color='black'
+                    )
+                
+                # Configurar eixos
+                ax.set_xlabel('Data')
+                ax.set_ylabel('Funcionário')
+                ax.set_title('Períodos de Férias por Funcionário')
+                
+                # Formatar eixo x para mostrar datas
+                date_min = ferias['Início_num'].min() - 5
+                date_max = ferias['Fim_num'].max() + 5
+                ax.set_xlim(date_min, date_max)
+                
+                # Converter números de volta para datas
+                ax.xaxis_date()
+                fig.autofmt_xdate()
+                
+                # Melhorar layout
+                plt.grid(axis='x', alpha=0.3)
+                plt.tight_layout()
+                
+                st.pyplot(fig)
+                
+            except Exception as e:
+                st.error(f"Erro ao gerar gráfico: {str(e)}")
+                st.info("Verifique se existem dados válidos para visualização")
 # Fechar conexão ao final
 if conn:
     conn.close()
