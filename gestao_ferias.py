@@ -448,8 +448,8 @@ with tab2:
             st.pyplot(fig)
             
         else:
-            st.info("Nenhuma férias marcada ainda.")
-                
+            st.info("Nenhuma férias marcada ainda.")             
+            
 # Fechar conexão ao final
 if conn:
     conn.close()
