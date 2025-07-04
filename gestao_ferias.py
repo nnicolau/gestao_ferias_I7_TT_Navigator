@@ -109,7 +109,7 @@ with st.sidebar:
             st.success("Configuração atualizada!")
 
 # Abas principais
-tab1, tab2,  = st.tabs(["Funcionários", "Férias", "Relatórios"])
+tab1, tab2, tab3  = st.tabs(["Funcionários", "Férias", "Relatórios"])
 
 with tab1:
     st.subheader("Gestão de Funcionários")
