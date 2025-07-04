@@ -8,7 +8,7 @@ import matplotlib.dates as mdates
 
 # Configuração inicial
 st.set_page_config(page_title="Gestão de Férias", layout="wide")
-st.image("Logotipo.png", width=50)
+st.image("Logotipo.png", width=100)
 st.title("🗕️ Sistema de Gestão de Férias - INDICA7")
 
 # Função para criar/conectar ao banco de dados
