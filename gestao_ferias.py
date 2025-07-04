@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import hashlib
 import bcrypt
-
+import os
 
 # Configuração de segurança
 try:
