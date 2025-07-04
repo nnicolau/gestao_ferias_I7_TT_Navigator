@@ -220,17 +220,20 @@ with tab3:
                                ORDER BY f.data_inicio''', conn)
 
     if not ferias_df.empty:
+        # Converter para datetime.date logo após carregar
+        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio']).dt.date
+        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim']).dt.date
+
         # Tabela Férias Marcadas (todas)
         st.subheader("📋 Férias Marcadas")
-        ferias_df_display = ferias_df.copy()
-        ferias_df_display['data_inicio'] = pd.to_datetime(ferias_df_display['data_inicio']).dt.date
-        ferias_df_display['data_fim'] = pd.to_datetime(ferias_df_display['data_fim']).dt.date
-        st.dataframe(ferias_df_display[['funcionario', 'data_inicio', 'data_fim', 'dias']])
+        st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias']])
 
         hoje = datetime.now().date()
         proximas = ferias_df[ferias_df['data_inicio'] >= hoje]
         st.subheader("📅 Próximas Férias")
         st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
+
+        # (continua o resto...)
 
         # Mostrar resumo por funcionário
         resumo = pd.read_sql('''SELECT fu.nome as Funcionário, fu.dias_ferias as "Disponível", 
