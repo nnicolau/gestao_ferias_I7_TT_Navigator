@@ -265,43 +265,34 @@ with tab3:
             ''', conn)
             st.dataframe(proximas)
             
-            # Gráfico de Gantt melhorado para destacar sobreposições
-            st.subheader("Linha do Tempo das Férias (Sobreposições Destacadas)")
+            # Gráfico de Gantt otimizado para mostrar sobreposições
+            st.subheader("Sobreposição de Férias")
             
-            # Preparar os dados
+            # Preparar dados
             ferias['Início'] = pd.to_datetime(ferias['Início'])
             ferias['Fim'] = pd.to_datetime(ferias['Fim'])
             
-            # Criar figura maior para melhor visualização
-            fig, ax = plt.subplots(figsize=(14, 8))
+            # Criar figura
+            fig, ax = plt.subplots(figsize=(14, 6))
             
-            # Verificar sobreposições
-            dates_range = pd.date_range(
+            # Calcular sobreposições
+            all_dates = pd.date_range(
                 start=ferias['Início'].min(),
                 end=ferias['Fim'].max()
             )
             
-            # Calcular congestionamento por dia
-            congestionamento = pd.DataFrame(index=dates_range, columns=['count'])
-            congestionamento['count'] = 0
-            
+            congestion = pd.Series(0, index=all_dates)
             for _, row in ferias.iterrows():
-                mask = (dates_range >= row['Início']) & (dates_range <= row['Fim'])
-                congestionamento.loc[mask, 'count'] += 1
+                mask = (all_dates >= row['Início']) & (all_dates <= row['Fim'])
+                congestion[mask] += 1
             
-            # Mapear cores baseado no nível de sobreposição
-            max_overlap = congestionamento['count'].max()
-            cmap = plt.get_cmap('RdYlGn_r')  # Vermelho para muitas sobreposições, verde para poucas
-            norm = plt.Normalize(1, max_overlap)
-            
-            # Plotar cada período de férias
-            for i, (_, row) in enumerate(ferias.iterrows()):
-                # Calcular nível médio de sobreposição para este período
-                mask = (dates_range >= row['Início']) & (dates_range <= row['Fim'])
-                avg_overlap = congestionamento.loc[mask, 'count'].mean()
+            # Plotar cada período com cor baseada na sobreposição
+            for _, row in ferias.iterrows():
+                overlap_days = congestion.loc[row['Início']:row['Fim']]
+                avg_overlap = overlap_days.mean()
                 
-                # Escolher cor baseada no nível de sobreposição
-                color = cmap(norm(avg_overlap))
+                # Cores: verde (1), amarelo (2), vermelho (3+)
+                color = 'green' if avg_overlap < 1.5 else 'goldenrod' if avg_overlap < 2.5 else 'red'
                 
                 ax.barh(
                     y=row['Funcionário'],
@@ -309,42 +300,45 @@ with tab3:
                     left=row['Início'],
                     color=color,
                     edgecolor='black',
-                    alpha=0.7,
-                    label=f"{row['Funcionário']} ({row['Dias']} dias)"
+                    alpha=0.7
                 )
                 
-                # Adicionar texto com número de sobreposições
-                ax.text(
-                    x=row['Início'] + (row['Fim'] - row['Início'])/2,
-                    y=row['Funcionário'],
-                    s=f"{int(avg_overlap)} {'pessoas' if avg_overlap > 1 else 'pessoa'}",
-                    va='center',
-                    ha='center',
-                    color='black',
-                    fontweight='bold'
-                )
+                # Mostrar número de sobreposições
+                if avg_overlap > 1:
+                    ax.text(
+                        x=row['Início'] + (row['Fim'] - row['Início'])/2,
+                        y=row['Funcionário'],
+                        s=f"{int(round(avg_overlap))}",
+                        va='center',
+                        ha='center',
+                        color='black',
+                        fontweight='bold',
+                        fontsize=10,
+                        bbox=dict(facecolor='white', alpha=0.8, edgecolor='none')
+                    )
             
-            # Adicionar barra de cores para a sobreposição
-            sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            sm.set_array([])
-            cbar = plt.colorbar(sm, ax=ax, label='Nível de Sobreposição')
-            cbar.set_ticks(range(1, max_overlap + 1))
+            # Destacar períodos problemáticos
+            high_congestion = congestion[congestion >= 3]
+            for date in high_congestion.index:
+                ax.axvline(x=date, color='darkred', alpha=0.3, linestyle='--')
             
             # Configurações do gráfico
             ax.set_xlabel('Data')
             ax.set_ylabel('Funcionário')
-            ax.set_title('Períodos de Férias com Destaque para Sobreposições', pad=20)
-            ax.grid(axis='x', linestyle='--', alpha=0.7)
+            ax.set_title('Períodos de Férias - Sobreposições Destacadas', pad=15)
             
             # Formatar datas
-            ax.xaxis.set_major_locator(mdates.MonthLocator())
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m/%Y'))
+            ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO))
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
             plt.xticks(rotation=45)
             
-            # Adicionar legenda de cores
-            handles = [plt.Rectangle((0,0),1,1, color=cmap(norm(i))) for i in range(1, max_overlap+1)]
-            ax.legend(handles, [f'{i} sobreposição{"es" if i>1 else ""}' for i in range(1, max_overlap+1)],
-                     title="Níveis de Sobreposição", bbox_to_anchor=(1.05, 1), loc='upper left')
+            # Adicionar legenda simplificada
+            legend_elements = [
+                plt.Rectangle((0,0),1,1, color='green', label='Sem sobreposição'),
+                plt.Rectangle((0,0),1,1, color='goldenrod', label='2 pessoas'),
+                plt.Rectangle((0,0),1,1, color='red', label='3+ pessoas')
+            ]
+            ax.legend(handles=legend_elements, loc='upper right', title="Sobreposições")
             
             plt.tight_layout()
             st.pyplot(fig)
