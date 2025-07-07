@@ -21,8 +21,8 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key-123')
 PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
 
 # Configuração do Supabase
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_URL = os.getenv("https://sykrunsjlkxptxphlmnx.supabase.co")
+SUPABASE_KEY = os.getenv("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5a3J1bnNqbGt4cHR4cGhsbW54Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5MjIyNDksImV4cCI6MjA2NzQ5ODI0OX0.scfVJFpCLed7db7LGmzlKmsjkFbjxEUWyGyU9LuJujA")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Função de autenticação
