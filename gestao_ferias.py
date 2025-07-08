@@ -21,7 +21,7 @@ def t(chave):
 if "lang" not in st.session_state:
     st.session_state.lang = "pt"
 
-st.sidebar.selectbox("🌐 Language / Língua", ["pt", "en"], index=0 if st.session_state.lang == "pt" else 1, key="lang")
+st.sidebar.selectbox("🌐 Língua / Language", ["pt", "en"], index=0 if st.session_state.lang == "pt" else 1, key="lang")
 
 # --- Carregar variáveis de ambiente ---
 try:
