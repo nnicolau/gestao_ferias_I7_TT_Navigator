@@ -59,7 +59,8 @@ with st.sidebar:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
         st.success("Configuração atualizada!")
 
-# Funções auxiliaresdef calcular_dias_uteis(inicio, fim):
+# Funções auxiliares
+    def calcular_dias_uteis(inicio, fim):
     inicio = pd.to_datetime(inicio)
     fim = pd.to_datetime(fim)
     return len(pd.bdate_range(start=inicio, end=fim))
