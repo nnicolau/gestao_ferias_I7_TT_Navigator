@@ -18,7 +18,10 @@ def t(chave):
     return traducoes.get(lang, {}).get(chave, chave)
 
 # --- Seleção de idioma ---
-st.sidebar.selectbox("🌐 Language / Língua", ["pt", "en"], index=0 if st.session_state.get("lang") == "pt" else 1, key="lang")
+if "lang" not in st.session_state:
+    st.session_state.lang = "pt"
+
+st.sidebar.selectbox("🌐 Language / Língua", ["pt", "en"], index=0 if st.session_state.lang == "pt" else 1, key="lang")
 
 # --- Carregar variáveis de ambiente ---
 try:
@@ -64,6 +67,7 @@ with st.sidebar:
     if novo_max != max_atual:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
         st.success(t("config_atualizada"))
+
 
 # Funções auxiliares
 def calcular_dias_uteis(inicio, fim):
