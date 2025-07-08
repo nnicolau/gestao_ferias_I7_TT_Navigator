@@ -293,7 +293,7 @@ with aba3:
 
         # Função para destacar férias passadas
         def highlight_passadas(row):
-        return ['background-color: #f0f0f0' if row['data_fim'].date() < hoje else '' for _ in row]
+            return ['background-color: #f0f0f0' if row['data_fim'].date() < hoje else '' for _ in row]
 
 st.subheader(t("historico_futuras"))
 st.dataframe(
