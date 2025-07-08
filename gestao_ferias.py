@@ -219,4 +219,100 @@ with aba2:
                                 st.warning("Férias removidas.")
                                 st.rerun()
 
-# aba3 permanece igual, manter código existente
+with aba3:
+    st.subheader("📊 Relatórios de Férias")
+
+    dados_ferias = supabase.table("ferias").select("*", "funcionarios(nome, dias_ferias)").execute().data
+    ferias_df = pd.DataFrame(dados_ferias)
+
+    if not ferias_df.empty:
+        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio']).dt.date
+        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim']).dt.date
+        ferias_df['funcionario'] = ferias_df['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
+
+        st.subheader("📋 Férias Marcadas")
+        st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias']])
+
+        hoje = datetime.now().date()
+        proximas = ferias_df[ferias_df['data_inicio'] >= hoje].sort_values(by='data_inicio')
+        st.subheader("📅 Próximas Férias")
+        st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
+
+        # Férias passadas - sombrear com style
+        ferias_df_sorted = ferias_df.sort_values(by='data_inicio')
+        def highlight_passadas(row):
+            return ['background-color: #f0f0f0' if row['data_fim'] < hoje else '' for _ in row]
+
+        st.subheader("🕘 Histórico + Futuras com Destaque Visual")
+        st.dataframe(
+            ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias']]
+            .style.apply(highlight_passadas, axis=1)
+        )
+
+        st.subheader("Resumo por Funcionário")
+        resumo = ferias_df.groupby('funcionario').agg(
+            Usado=('dias', 'sum')
+        ).reset_index()
+        resumo['Disponível'] = ferias_df['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
+        resumo['Restante'] = resumo['Disponível'] - resumo['Usado']
+        st.dataframe(resumo)
+
+        st.subheader("📈 Sobreposição de Férias")
+        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
+        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim'])
+
+        fig, ax = plt.subplots(figsize=(14, 6))
+        all_dates = pd.date_range(
+            start=ferias_df['data_inicio'].min(),
+            end=ferias_df['data_fim'].max()
+        )
+
+        congestion = pd.Series(0, index=all_dates)
+        for _, row in ferias_df.iterrows():
+            mask = (all_dates >= row['data_inicio']) & (all_dates <= row['data_fim'])
+            congestion[mask] += 1
+
+        for _, row in ferias_df.iterrows():
+            avg_overlap = congestion.loc[row['data_inicio']:row['data_fim']].mean()
+            color = 'green' if avg_overlap < 1.5 else 'goldenrod' if avg_overlap < 2.5 else 'red'
+            ax.barh(
+                y=row['funcionario'],
+                width=(row['data_fim'] - row['data_inicio']).days,
+                left=row['data_inicio'],
+                color=color,
+                edgecolor='black',
+                alpha=0.7
+            )
+            if avg_overlap > 1:
+                ax.text(
+                    x=row['data_inicio'] + (row['data_fim'] - row['data_inicio']) / 2,
+                    y=row['funcionario'],
+                    s=f"{int(round(avg_overlap))}",
+                    va='center',
+                    ha='center',
+                    fontsize=10,
+                    bbox=dict(facecolor='white', alpha=0.8)
+                )
+
+        for date in congestion[congestion >= 3].index:
+            ax.axvline(x=date, color='darkred', alpha=0.3, linestyle='--')
+
+        ax.set_xlabel('Data')
+        ax.set_ylabel('Funcionário')
+        ax.set_title('Períodos de Férias - Sobreposições Destacadas', pad=15)
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+        plt.xticks(rotation=45)
+
+        legend_elements = [
+            plt.Rectangle((0, 0), 1, 1, color='green', label='Sem sobreposição'),
+            plt.Rectangle((0, 0), 1, 1, color='goldenrod', label='2 pessoas'),
+            plt.Rectangle((0, 0), 1, 1, color='red', label='3+ pessoas')
+        ]
+        ax.legend(handles=legend_elements, loc='upper right', title="Sobreposições")
+
+        plt.tight_layout()
+        st.pyplot(fig)
+    else:
+        st.info("Nenhuma férias marcada para mostrar.")
+
