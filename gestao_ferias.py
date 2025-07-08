@@ -91,9 +91,21 @@ def verificar_limite_ferias(nova_inicio, nova_fim, funcionario_id):
 
     return True, None
 
-# Patch: atualizar também durante edição de férias
-# Já incluído nas chamadas da função verificar_limite_ferias
-# Nada mais a alterar aqui - tudo centralizado na função
+def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id):
+    nova_inicio = pd.to_datetime(nova_inicio)
+    nova_fim = pd.to_datetime(nova_fim)
+
+    ferias_funcionario = supabase.table("ferias").select("data_inicio", "data_fim").eq("funcionario_id", funcionario_id).execute().data
+
+    for f in ferias_funcionario:
+        ini = pd.to_datetime(f['data_inicio'])
+        fim = pd.to_datetime(f['data_fim'])
+
+        if not (nova_fim < ini or nova_inicio > fim):
+            return False  # Há sobreposição
+
+    return True
+
 
     if not calendario.empty:
         contagem = calendario.groupby('Data').sum()
