@@ -124,12 +124,12 @@ with aba1:
                                 "dias_ferias": novos_dias
                             }).eq("id", row['id']).execute()
                             st.success("Atualizado.")
-                            st.experimental_rerun()
+                            st.rerun()
                     with col2:
                         if st.form_submit_button("Apagar"):
                             supabase.table("funcionarios").delete().eq("id", row['id']).execute()
                             st.warning("Funcionário removido.")
-                            st.experimental_rerun()
+                            st.rerun()
 
 with aba2:
     st.subheader("Gestão de Férias")
