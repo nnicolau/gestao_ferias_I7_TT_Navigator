@@ -178,7 +178,7 @@ with aba1:
 
 with aba2:
     st.subheader(t("gestao_ferias"))
-    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome").execute().data)
+    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
 
     if not funcionarios.empty:
         with st.form("marcar_ferias", clear_on_submit=True):
@@ -187,11 +187,13 @@ with aba2:
                 funcionarios['id'],
                 format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0]
             )
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 data_inicio = st.date_input(t("inicio"))
             with col2:
                 data_fim = st.date_input(t("fim"))
+            with col3:
+                ano_ferias = st.number_input(t("ano_ferias"), min_value=2000, max_value=datetime.now().year + 1, value=datetime.now().year)
 
             if st.form_submit_button(t("marcar")):
                 if pd.to_datetime(data_fim) < pd.to_datetime(data_inicio):
@@ -210,14 +212,22 @@ with aba2:
                             if not ok:
                                 st.error(t("erro_excesso_pessoas").format(dia=dia_conflito))
                             else:
-                                supabase.table("ferias").insert({
-                                    "funcionario_id": funcionario_id,
-                                    "data_inicio": data_inicio.isoformat(),
-                                    "data_fim": data_fim.isoformat(),
-                                    "dias": dias
-                                }).execute()
-                                st.success(t("ferias_marcadas"))
-                                st.rerun()
+                                # Verificar limite anual de dias por funcionário
+                                ferias_ano = supabase.table("ferias").select("dias").eq("funcionario_id", funcionario_id).eq("ano", ano_ferias).execute().data
+                                usado_ano = sum([f['dias'] for f in ferias_ano])
+                                dias_disponiveis = funcionarios.loc[funcionarios['id'] == funcionario_id, 'dias_ferias'].values[0]
+                                if usado_ano + dias > dias_disponiveis:
+                                    st.error(t("erro_dias_excedidos").format(usado=usado_ano, disponivel=dias_disponiveis, ano=ano_ferias))
+                                else:
+                                    supabase.table("ferias").insert({
+                                        "funcionario_id": funcionario_id,
+                                        "data_inicio": data_inicio.isoformat(),
+                                        "data_fim": data_fim.isoformat(),
+                                        "dias": dias,
+                                        "ano": ano_ferias
+                                    }).execute()
+                                    st.success(t("ferias_marcadas"))
+                                    st.rerun()
 
         ferias_data = supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
         ferias = pd.DataFrame(ferias_data)
@@ -242,7 +252,6 @@ with aba2:
                                     if dias == 0:
                                         st.error(t("erro_sem_dias_uteis"))
                                     else:
-                                        # Verificar duplicidade na edição (ignorando o próprio registo)
                                         ok_dup, inicio_dup, fim_dup = verificar_duplicidade_ferias(novo_inicio, novo_fim, row['funcionario_id'], ignorar_id=row['id'])
                                         if not ok_dup:
                                             st.error(t("erro_duplicado").format(inicio=inicio_dup, fim=fim_dup))
