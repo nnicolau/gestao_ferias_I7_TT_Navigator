@@ -61,9 +61,9 @@ with st.sidebar:
 
 # Funções auxiliares
     def calcular_dias_uteis(inicio, fim):
-    inicio = pd.to_datetime(inicio)
-    fim = pd.to_datetime(fim)
-    return len(pd.bdate_range(start=inicio, end=fim))
+        inicio = pd.to_datetime(inicio)
+        fim = pd.to_datetime(fim)
+        return len(pd.bdate_range(start=inicio, end=fim))
 
 def verificar_limite_ferias(nova_inicio, nova_fim, funcionario_id):
     res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
