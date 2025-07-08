@@ -243,7 +243,7 @@ with aba3:
         def highlight_passadas(row):
             return ['background-color: #f0f0f0' if row['data_fim'] < hoje else '' for _ in row]
 
-        st.subheader("🕘 Histórico + Futuras com Destaque Visual")
+        st.subheader("🕘 Histórico + Futuras")
         st.dataframe(
             ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias']]
             .style.apply(highlight_passadas, axis=1)
