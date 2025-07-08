@@ -133,16 +133,28 @@ with aba1:
 
 with aba2:
     st.subheader("Gestão de Férias")
-    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome").execute().data)
+
+    funcionarios = pd.DataFrame(
+        supabase.table("funcionarios")
+        .select("id", "nome")
+        .execute()
+        .data
+    )
+
     if not funcionarios.empty:
         with st.form("marcar_ferias", clear_on_submit=True):
-            funcionario_id = st.selectbox("Funcionário", funcionarios['id'],
-                format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0])
+            funcionario_id = st.selectbox(
+                "Funcionário",
+                funcionarios['id'],
+                format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0]
+            )
+
             col1, col2 = st.columns(2)
             with col1:
                 data_inicio = st.date_input("Início")
             with col2:
                 data_fim = st.date_input("Fim")
+
             if st.form_submit_button("Marcar"):
                 if data_fim <= data_inicio:
                     st.error("Data final deve ser posterior à inicial.")
@@ -159,12 +171,47 @@ with aba2:
                             "dias": dias
                         }).execute()
                         st.success("Férias marcadas.")
+                        st.rerun()
 
-        ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data)
+        # Obter e formatar dados de férias
+        dados_ferias = supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
+        ferias = pd.DataFrame(dados_ferias)
+
         if not ferias.empty:
-            ferias['nome'] = ferias['funcionarios']['nome']
-            st.dataframe(ferias)
-            # Editar / Apagar (igual à lógica de cima - podes copiar/adaptar)
+            # Extrair nome com segurança
+            ferias['nome'] = ferias['funcionarios'].apply(lambda x: x['nome'] if isinstance(x, dict) and 'nome' in x else '')
+
+            st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias']])
+
+            with st.expander("Editar / Apagar Férias"):
+                for _, row in ferias.iterrows():
+                    with st.form(f"edit_ferias_{row['id']}"):
+                        st.markdown(f"**{row['nome']}**")
+                        novo_inicio = st.date_input("Início", value=pd.to_datetime(row['data_inicio']))
+                        novo_fim = st.date_input("Fim", value=pd.to_datetime(row['data_fim']))
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("Atualizar"):
+                                if novo_fim <= novo_inicio:
+                                    st.error("Data final deve ser posterior.")
+                                else:
+                                    dias = calcular_dias_uteis(novo_inicio, novo_fim)
+                                    ok, dia_conflito = verificar_limite_ferias(novo_inicio, novo_fim, row['funcionario_id'])
+                                    if not ok:
+                                        st.error(f"Conflito em {dia_conflito}.")
+                                    else:
+                                        supabase.table("ferias").update({
+                                            "data_inicio": novo_inicio.isoformat(),
+                                            "data_fim": novo_fim.isoformat(),
+                                            "dias": dias
+                                        }).eq("id", row['id']).execute()
+                                        st.success("Atualizado.")
+                                        st.rerun()
+                        with col2:
+                            if st.form_submit_button("Apagar"):
+                                supabase.table("ferias").delete().eq("id", row['id']).execute()
+                                st.warning("Férias removidas.")
+                                st.rerun()
 
 with aba3:
     st.subheader("📊 Relatórios de Férias")
