@@ -309,15 +309,23 @@ with aba3:
         resumo = ferias_df.groupby(['funcionario', 'funcionario_id', 'ano', 'dias_ferias']).agg(
             Usado=('dias', 'sum')
         ).reset_index()
-        resumo['Disponível'] = resumo['dias_ferias']
-        resumo['Restante'] = resumo['Disponível'] - resumo['Usado']
-        st.dataframe(resumo.rename(columns={
-            'Usado': t("usado"),
-            'Disponível': t("disponivel"),
-            'Restante': t("restante"),
+        resumo['Disponivel'] = resumo['dias_ferias']
+        resumo['Restante'] = resumo['Disponivel'] - resumo['Usado']
+        resumo.rename(columns={
+            'funcionario': t("nome"),
             'ano': t("ano_ferias"),
-            'funcionario': t("nome")
-        })[['nome', t("ano_ferias"), t("usado"), t("disponivel"), t("restante")]])
+            'Usado': t("usado"),
+            'Disponivel': t("disponivel"),
+            'Restante': t("restante")
+        }, inplace=True)
+
+        st.dataframe(resumo[[
+            t("nome"),
+            t("ano_ferias"),
+            t("usado"),
+            t("disponivel"),
+            t("restante")
+        ]])
 
         st.subheader(t("sobreposicao"))
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
