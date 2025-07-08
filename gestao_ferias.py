@@ -192,14 +192,14 @@ with aba2:
             with col2:
                 data_fim = st.date_input("Fim")
 
-            def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_id=None):
+        def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_id=None):
             nova_inicio = pd.to_datetime(nova_inicio)
             nova_fim = pd.to_datetime(nova_fim)
 
-    query = supabase.table("ferias").select("id", "data_inicio", "data_fim").eq("funcionario_id", funcionario_id)
-    ferias_funcionario = query.execute().data
+            query = supabase.table("ferias").select("id", "data_inicio", "data_fim").eq("funcionario_id", funcionario_id)
+            ferias_funcionario = query.execute().data
 
-    for f in ferias_funcionario:
+        for f in ferias_funcionario:
         if ignorar_id is not None and f['id'] == ignorar_id:
             continue
 
