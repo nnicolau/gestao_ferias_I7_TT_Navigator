@@ -15,6 +15,7 @@ try:
     load_dotenv()
 except ImportError:
     st.warning("dotenv não está instalado. Usando variáveis padrão.")
+    
 
 # Configuração de segurança
 SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key-123')
@@ -23,6 +24,8 @@ PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
 # Configuração do Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+print("SUPABASE_URL:", os.getenv("SUPABASE_URL"))
+
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Função de autenticação
