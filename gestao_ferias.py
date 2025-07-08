@@ -106,6 +106,10 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id):
 
     return True
 
+# Patch: atualizar também durante edição de férias
+# Já incluído nas chamadas da função verificar_limite_ferias e verificar_duplicidade_ferias
+# Nada mais a alterar aqui - tudo centralizado nas funções
+
 
     if not calendario.empty:
         contagem = calendario.groupby('Data').sum()
