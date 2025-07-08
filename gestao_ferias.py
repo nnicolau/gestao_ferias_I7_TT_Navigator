@@ -70,7 +70,7 @@ def verificar_limite_ferias(nova_inicio, nova_fim, funcionario_id):
     res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
     max_simultaneas = res.data['max_ferias_simultaneas']
 
-    ferias_todas = supabase.table("ferias").select("*").neq("funcionario_id", funcionario_id).execute().data
+    ferias_todas = supabase.table("ferias").select("*", "funcionario_id").neq("funcionario_id", funcionario_id).execute().data
 
     calendario = pd.Series(0, index=pd.bdate_range(start=nova_inicio, end=nova_fim))
 
@@ -91,18 +91,22 @@ def verificar_limite_ferias(nova_inicio, nova_fim, funcionario_id):
 
     return True, None
 
-def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id):
+def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_id=None):
     nova_inicio = pd.to_datetime(nova_inicio)
     nova_fim = pd.to_datetime(nova_fim)
 
-    ferias_funcionario = supabase.table("ferias").select("data_inicio", "data_fim").eq("funcionario_id", funcionario_id).execute().data
+    query = supabase.table("ferias").select("id", "data_inicio", "data_fim").eq("funcionario_id", funcionario_id)
+    ferias_funcionario = query.execute().data
 
     for f in ferias_funcionario:
+        if ignorar_id is not None and f['id'] == ignorar_id:
+            continue
+
         ini = pd.to_datetime(f['data_inicio'])
         fim = pd.to_datetime(f['data_fim'])
 
         if not (nova_fim < ini or nova_inicio > fim):
-            return False  # Há sobreposição
+            return False  # Sobreposição encontrada
 
     return True
 
