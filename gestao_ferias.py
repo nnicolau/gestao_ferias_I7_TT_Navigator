@@ -271,25 +271,22 @@ with aba3:
     ferias_df = pd.DataFrame(dados_ferias)
 
     if not ferias_df.empty:
-        hoje = datetime.now().date()
-
-        # Garantir datas como datetime para ordenação correta
-        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
-        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim'])
+        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio']).dt.date
+        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim']).dt.date
         ferias_df['funcionario'] = ferias_df['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
 
         st.subheader(t("ferias_marcadas_titulo"))
         st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias']])
 
-        proximas = ferias_df[ferias_df['data_inicio'].dt.date >= hoje].sort_values(by='data_inicio')
+        hoje = datetime.now().date()
+        proximas = ferias_df[ferias_df['data_inicio'] >= hoje].sort_values(by='data_inicio')
         st.subheader(t("proximas_ferias"))
         st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
 
         # Férias passadas - sombrear com style
         ferias_df_sorted = ferias_df.sort_values(by='data_inicio')
-
         def highlight_passadas(row):
-            return ['background-color: #f0f0f0' if row['data_fim'].date() < hoje else '' for _ in row]
+            return ['background-color: #f0f0f0' if row['data_fim'] < hoje else '' for _ in row]
 
         st.subheader(t("historico_futuras"))
         st.dataframe(
@@ -308,7 +305,6 @@ with aba3:
             'Disponível': t("disponivel"),
             'Restante': t("restante")
         }))
-
 
         st.subheader(t("sobreposicao"))
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
