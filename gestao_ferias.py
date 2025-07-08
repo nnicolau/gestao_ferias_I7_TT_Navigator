@@ -283,16 +283,24 @@ with aba3:
         st.subheader(t("proximas_ferias"))
         st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
 
-        # Férias passadas - sombrear com style
-        ferias_df_sorted = ferias_df.sort_values(by='data_inicio')
-        def highlight_passadas(row):
-            return ['background-color: #f0f0f0' if row['data_fim'] < hoje else '' for _ in row]
 
-        st.subheader(t("historico_futuras"))
-        st.dataframe(
-            ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias']]
-            .style.apply(highlight_passadas, axis=1)
-        )
+        # Garantir datas como datetime para ordenação correta
+        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
+        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim'])
+
+        # Ordenar por data de início crescente
+        ferias_df_sorted = ferias_df.sort_values(by='data_inicio')
+
+        # Função para destacar férias passadas
+        def highlight_passadas(row):
+        return ['background-color: #f0f0f0' if row['data_fim'].date() < hoje else '' for _ in row]
+
+st.subheader(t("historico_futuras"))
+st.dataframe(
+    ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias']]
+    .style.apply(highlight_passadas, axis=1)
+)
+
 
         st.subheader(t("resumo_funcionario"))
         resumo = ferias_df.groupby('funcionario').agg(
