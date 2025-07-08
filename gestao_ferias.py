@@ -285,12 +285,12 @@ with aba3:
         ferias_df['funcionario'] = ferias_df['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
 
         st.subheader(t("ferias_marcadas_titulo"))
-        st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias']])
+        st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias', 'ano']])
 
         hoje = datetime.now().date()
         proximas = ferias_df[ferias_df['data_inicio'] >= hoje].sort_values(by='data_inicio')
         st.subheader(t("proximas_ferias"))
-        st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
+        st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim', 'ano']])
 
         # Férias passadas - sombrear com style
         ferias_df_sorted = ferias_df.sort_values(by='data_inicio')
@@ -299,12 +299,12 @@ with aba3:
 
         st.subheader(t("historico_futuras"))
         st.dataframe(
-            ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias']]
+            ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias', 'ano']]
             .style.apply(highlight_passadas, axis=1)
         )
 
         st.subheader(t("resumo_funcionario"))
-        resumo = ferias_df.groupby('funcionario').agg(
+        resumo = ferias_df.groupby(['funcionario', 'ano']).agg(
             Usado=('dias', 'sum')
         ).reset_index()
         resumo['Disponível'] = ferias_df['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
@@ -312,7 +312,8 @@ with aba3:
         st.dataframe(resumo.rename(columns={
             'Usado': t("usado"),
             'Disponível': t("disponivel"),
-            'Restante': t("restante")
+            'Restante': t("restante"),
+            'ano': t("ano_ferias")
         }))
 
         st.subheader(t("sobreposicao"))
