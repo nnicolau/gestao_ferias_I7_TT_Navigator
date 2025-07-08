@@ -213,7 +213,7 @@ with aba2:
     return True, None, None
 
 
-if st.form_submit_button("Marcar"):
+    if st.form_submit_button("Marcar"):
     if pd.to_datetime(data_fim) < pd.to_datetime(data_inicio):
         st.error("A data final não pode ser anterior à inicial.")
     else:
