@@ -230,7 +230,6 @@ with aba3:
     ferias_df = pd.DataFrame(dados_ferias)
 
     if not ferias_df.empty:
-        # Normalizar datas e nomes
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio']).dt.date
         ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim']).dt.date
         ferias_df['funcionario'] = ferias_df['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
@@ -239,33 +238,40 @@ with aba3:
         st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias']])
 
         hoje = datetime.now().date()
-        proximas = ferias_df[ferias_df['data_inicio'] >= hoje]
+        proximas = ferias_df[ferias_df['data_inicio'] >= hoje].sort_values(by='data_inicio')
         st.subheader("📅 Próximas Férias")
         st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim']])
+
+        # Férias passadas - sombrear com style
+        ferias_df_sorted = ferias_df.sort_values(by='data_inicio')
+        def highlight_passadas(row):
+            return ['background-color: #f0f0f0' if row['data_fim'] < hoje else '' for _ in row]
+
+        st.subheader("🕘 Histórico + Futuras com Destaque Visual")
+        st.dataframe(
+            ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias']]
+            .style.apply(highlight_passadas, axis=1)
+        )
 
         st.subheader("Resumo por Funcionário")
         resumo = ferias_df.groupby('funcionario').agg(
             Usado=('dias', 'sum')
         ).reset_index()
-
         resumo['Disponível'] = ferias_df['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
         resumo['Restante'] = resumo['Disponível'] - resumo['Usado']
         st.dataframe(resumo)
 
         st.subheader("📈 Sobreposição de Férias")
-
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
         ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim'])
 
         fig, ax = plt.subplots(figsize=(14, 6))
-
         all_dates = pd.date_range(
             start=ferias_df['data_inicio'].min(),
             end=ferias_df['data_fim'].max()
         )
 
         congestion = pd.Series(0, index=all_dates)
-
         for _, row in ferias_df.iterrows():
             mask = (all_dates >= row['data_inicio']) & (all_dates <= row['data_fim'])
             congestion[mask] += 1
@@ -283,7 +289,7 @@ with aba3:
             )
             if avg_overlap > 1:
                 ax.text(
-                    x=row['data_inicio'] + (row['data_fim'] - row['data_inicio'])/2,
+                    x=row['data_inicio'] + (row['data_fim'] - row['data_inicio']) / 2,
                     y=row['funcionario'],
                     s=f"{int(round(avg_overlap))}",
                     va='center',
@@ -303,9 +309,9 @@ with aba3:
         plt.xticks(rotation=45)
 
         legend_elements = [
-            plt.Rectangle((0,0),1,1, color='green', label='Sem sobreposição'),
-            plt.Rectangle((0,0),1,1, color='goldenrod', label='2 pessoas'),
-            plt.Rectangle((0,0),1,1, color='red', label='3+ pessoas')
+            plt.Rectangle((0, 0), 1, 1, color='green', label='Sem sobreposição'),
+            plt.Rectangle((0, 0), 1, 1, color='goldenrod', label='2 pessoas'),
+            plt.Rectangle((0, 0), 1, 1, color='red', label='3+ pessoas')
         ]
         ax.legend(handles=legend_elements, loc='upper right', title="Sobreposições")
 
