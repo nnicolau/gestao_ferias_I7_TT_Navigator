@@ -276,13 +276,15 @@ with aba2:
 with aba3:
     st.subheader(t("relatorios_ferias"))
 
-    dados_ferias = supabase.table("ferias").select("*", "funcionarios(nome, dias_ferias)").execute().data
+    dados_ferias = supabase.table("ferias").select("*", "funcionarios(id, nome, dias_ferias)").execute().data
     ferias_df = pd.DataFrame(dados_ferias)
 
     if not ferias_df.empty:
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio']).dt.date
         ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim']).dt.date
         ferias_df['funcionario'] = ferias_df['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
+        ferias_df['funcionario_id'] = ferias_df['funcionarios'].apply(lambda x: x.get('id', None) if isinstance(x, dict) else None)
+        ferias_df['dias_ferias'] = ferias_df['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
 
         st.subheader(t("ferias_marcadas_titulo"))
         st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias', 'ano']])
@@ -304,17 +306,18 @@ with aba3:
         )
 
         st.subheader(t("resumo_funcionario"))
-        resumo = ferias_df.groupby(['funcionario', 'ano']).agg(
+        resumo = ferias_df.groupby(['funcionario', 'funcionario_id', 'ano', 'dias_ferias']).agg(
             Usado=('dias', 'sum')
         ).reset_index()
-        resumo['Disponível'] = ferias_df['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
+        resumo['Disponível'] = resumo['dias_ferias']
         resumo['Restante'] = resumo['Disponível'] - resumo['Usado']
         st.dataframe(resumo.rename(columns={
             'Usado': t("usado"),
             'Disponível': t("disponivel"),
             'Restante': t("restante"),
-            'ano': t("ano_ferias")
-        }))
+            'ano': t("ano_ferias"),
+            'funcionario': t("nome")
+        })[['nome', t("ano_ferias"), t("usado"), t("disponivel"), t("restante")]])
 
         st.subheader(t("sobreposicao"))
         ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
