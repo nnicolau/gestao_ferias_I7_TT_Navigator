@@ -6,55 +6,64 @@ from datetime import datetime
 from supabase import create_client, Client
 import bcrypt
 import os
+import toml
 
-# Carregar variáveis de ambiente
+# --- Carregar traduções ---
+with open("traducao.toml", "r", encoding="utf-8") as f:
+    traducoes = toml.load(f)
+
+# --- Função de tradução ---
+def t(chave):
+    lang = st.session_state.get("lang", "pt")
+    return traducoes.get(lang, {}).get(chave, chave)
+
+# --- Seleção de idioma ---
+st.sidebar.selectbox("🌐 Language / Língua", ["pt", "en"], index=0 if st.session_state.get("lang") == "pt" else 1, key="lang")
+
+# --- Carregar variáveis de ambiente ---
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     st.warning("dotenv não está instalado. Usando variáveis padrão.")
 
-# Configuração de segurança
 SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key-123')
 PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
-
-# Configuração do Supabase
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Função de autenticação
+# --- Autenticação ---
 def check_password():
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         return True
 
-    password = st.text_input("Senha de acesso", type="password", key="password_input")
-
+    password = st.text_input(t("senha_acesso"), type="password", key="password_input")
     if password:
         if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
             st.session_state.authenticated = True
             st.rerun()
         else:
-            st.error("Senha incorreta")
-
+            st.error(t("senha_incorreta"))
     return False
 
 if not check_password():
     st.stop()
 
-st.set_page_config(page_title="Gestão de Férias", layout="wide")
+# --- Configuração da página ---
+st.set_page_config(page_title=t("titulo"), layout="wide")
 st.image("Logotipo.png", width=100)
-st.title("📅 Sistema de Gestão de Férias - INDICA7")
+st.title(t("titulo"))
 
-# Sidebar
+# --- Sidebar: configurações ---
 with st.sidebar:
-    st.header("Configurações")
+    st.header(t("configuracoes"))
     res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
     max_atual = res.data['max_ferias_simultaneas']
-    novo_max = st.number_input("Máximo em férias simultâneas", min_value=1, value=max_atual)
+    novo_max = st.number_input(t("max_ferias_simultaneas"), min_value=1, value=max_atual)
     if novo_max != max_atual:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
-        st.success("Configuração atualizada!")
+        st.success(t("config_atualizada"))
 
 # Funções auxiliares
 def calcular_dias_uteis(inicio, fim):
