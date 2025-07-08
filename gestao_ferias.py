@@ -68,18 +68,19 @@ def verificar_limite_ferias(nova_inicio, nova_fim, funcionario_id):
     max_simultaneas = res.data['max_ferias_simultaneas']
 
     ferias_todas = supabase.table("ferias").select("*").neq("funcionario_id", funcionario_id).execute().data
-    calendario = pd.DataFrame(columns=['Data', 'Pessoas'])
-
-    nova_inicio = pd.to_datetime(nova_inicio).date()
-    nova_fim = pd.to_datetime(nova_fim).date()
+    calendario = pd.Series(0, index=pd.bdate_range(start=nova_inicio, end=nova_fim))
 
     for f in ferias_todas:
-        ini = pd.to_datetime(f['data_inicio']).date()
-        fim = pd.to_datetime(f['data_fim']).date()
-        if ini <= nova_fim and fim >= nova_inicio:
-            dias = pd.bdate_range(start=max(ini, nova_inicio), end=min(fim, nova_fim))
-            for dia in dias:
-                calendario.loc[len(calendario)] = [dia, 1]
+        ini = pd.to_datetime(f['data_inicio'])
+        fim = pd.to_datetime(f['data_fim'])
+        periodo = pd.bdate_range(start=max(ini, nova_inicio), end=min(fim, nova_fim))
+        calendario.loc[periodo] += 1
+
+    conflito = calendario[calendario >= max_simultaneas]
+    if not conflito.empty:
+        return False, conflito.index[0].strftime('%d/%m/%Y')
+
+    return True, None
 
     if not calendario.empty:
         contagem = calendario.groupby('Data').sum()
