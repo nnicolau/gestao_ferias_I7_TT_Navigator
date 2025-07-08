@@ -44,7 +44,7 @@ if not check_password():
 
 st.set_page_config(page_title="Gestão de Férias", layout="wide")
 st.image("Logotipo.png", width=100)
-st.title("🗕 Sistema de Gestão de Férias - INDICA7")
+st.title("📅 Sistema de Gestão de Férias - INDICA7")
 
 # Sidebar
 with st.sidebar:
