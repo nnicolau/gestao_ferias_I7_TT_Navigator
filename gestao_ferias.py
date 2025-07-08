@@ -59,8 +59,9 @@ with st.sidebar:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
         st.success("Configuração atualizada!")
 
-# Funções auxiliares
-def calcular_dias_uteis(inicio, fim):
+# Funções auxiliaresdef calcular_dias_uteis(inicio, fim):
+    inicio = pd.to_datetime(inicio)
+    fim = pd.to_datetime(fim)
     return len(pd.bdate_range(start=inicio, end=fim))
 
 def verificar_limite_ferias(nova_inicio, nova_fim, funcionario_id):
@@ -165,9 +166,11 @@ with aba2:
             with col2:
                 data_fim = st.date_input("Fim")
 
-            if st.form_submit_button("Marcar"):
-                if data_fim <= data_inicio:
-                    st.error("Data final deve ser posterior à inicial.")
+            if st.form_submit_button("Marcar"):if pd.to_datetime(data_fim) < pd.to_datetime(data_inicio):
+            st.error("A data final não pode ser anterior à inicial.")
+            else:
+            dias = calcular_dias_uteis(data_inicio, data_fim)
+   
                 else:
                     dias = calcular_dias_uteis(data_inicio, data_fim)
                     ok, dia_conflito = verificar_limite_ferias(data_inicio, data_fim, funcionario_id)
