@@ -106,9 +106,9 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
         fim = pd.to_datetime(f['data_fim'])
 
         if not (nova_fim < ini or nova_inicio > fim):
-            return False  # Sobreposição encontrada
+            return False, ini.strftime('%d/%m/%Y'), fim.strftime('%d/%m/%Y')  # Sobreposição encontrada
 
-    return True
+    return True, None, None
 
 # Patch: atualizar também durante edição de férias
 # Já incluído nas chamadas da função verificar_limite_ferias e verificar_duplicidade_ferias
@@ -192,26 +192,53 @@ with aba2:
             with col2:
                 data_fim = st.date_input("Fim")
 
-            if st.form_submit_button("Marcar"):
-                if pd.to_datetime(data_fim) < pd.to_datetime(data_inicio):
-                    st.error("A data final não pode ser anterior à inicial.")
+            def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_id=None):
+    nova_inicio = pd.to_datetime(nova_inicio)
+    nova_fim = pd.to_datetime(nova_fim)
+
+    query = supabase.table("ferias").select("id", "data_inicio", "data_fim").eq("funcionario_id", funcionario_id)
+    ferias_funcionario = query.execute().data
+
+    for f in ferias_funcionario:
+        if ignorar_id is not None and f['id'] == ignorar_id:
+            continue
+
+        ini = pd.to_datetime(f['data_inicio'])
+        fim = pd.to_datetime(f['data_fim'])
+
+        if not (nova_fim < ini or nova_inicio > fim):
+            # Sobreposição encontrada
+            return False, ini.strftime('%d/%m/%Y'), fim.strftime('%d/%m/%Y')
+
+    return True, None, None
+
+
+if st.form_submit_button("Marcar"):
+    if pd.to_datetime(data_fim) < pd.to_datetime(data_inicio):
+        st.error("A data final não pode ser anterior à inicial.")
+    else:
+        dias = calcular_dias_uteis(data_inicio, data_fim)
+        if dias == 0:
+            st.error("O período selecionado não contém dias úteis.")
+        else:
+            # Verificar duplicidade para o mesmo funcionário
+            ok_dup, inicio_dup, fim_dup = verificar_duplicidade_ferias(data_inicio, data_fim, funcionario_id)
+            if not ok_dup:
+                st.error(f"O funcionário já tem férias marcadas entre {inicio_dup} e {fim_dup}.")
+            else:
+                ok, dia_conflito = verificar_limite_ferias(data_inicio, data_fim, funcionario_id)
+                if not ok:
+                    st.error(f"Excesso de pessoas em férias no dia {dia_conflito}.")
                 else:
-                    dias = calcular_dias_uteis(data_inicio, data_fim)
-                    if dias == 0:
-                        st.error("O período selecionado não contém dias úteis.")
-                    else:
-                        ok, dia_conflito = verificar_limite_ferias(data_inicio, data_fim, funcionario_id)
-                        if not ok:
-                            st.error(f"Excesso de pessoas em férias no dia {dia_conflito}.")
-                        else:
-                            supabase.table("ferias").insert({
-                                "funcionario_id": funcionario_id,
-                                "data_inicio": data_inicio.isoformat(),
-                                "data_fim": data_fim.isoformat(),
-                                "dias": dias
-                            }).execute()
-                            st.success("Férias marcadas.")
-                            st.rerun()
+                    supabase.table("ferias").insert({
+                        "funcionario_id": funcionario_id,
+                        "data_inicio": data_inicio.isoformat(),
+                        "data_fim": data_fim.isoformat(),
+                        "dias": dias
+                    }).execute()
+                    st.success("Férias marcadas.")
+                    st.rerun()
+
 
         ferias_data = supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
         ferias = pd.DataFrame(ferias_data)
