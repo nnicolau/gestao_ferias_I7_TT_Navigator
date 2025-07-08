@@ -64,23 +64,36 @@ def calcular_dias_uteis(inicio, fim):
     return len(dias_uteis)
 
 def verificar_limite_ferias(nova_inicio, nova_fim, funcionario_id):
+    nova_inicio = pd.to_datetime(nova_inicio)
+    nova_fim = pd.to_datetime(nova_fim)
+
     res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
     max_simultaneas = res.data['max_ferias_simultaneas']
 
     ferias_todas = supabase.table("ferias").select("*").neq("funcionario_id", funcionario_id).execute().data
+
     calendario = pd.Series(0, index=pd.bdate_range(start=nova_inicio, end=nova_fim))
 
     for f in ferias_todas:
         ini = pd.to_datetime(f['data_inicio'])
         fim = pd.to_datetime(f['data_fim'])
-        periodo = pd.bdate_range(start=max(ini, nova_inicio), end=min(fim, nova_fim))
-        calendario.loc[periodo] += 1
+
+        inter_inicio = max(ini, nova_inicio)
+        inter_fim = min(fim, nova_fim)
+
+        if inter_inicio <= inter_fim:
+            periodo = pd.bdate_range(start=inter_inicio, end=inter_fim)
+            calendario.loc[periodo] += 1
 
     conflito = calendario[calendario >= max_simultaneas]
     if not conflito.empty:
         return False, conflito.index[0].strftime('%d/%m/%Y')
 
     return True, None
+
+# Patch: atualizar também durante edição de férias
+# Já incluído nas chamadas da função verificar_limite_ferias
+# Nada mais a alterar aqui - tudo centralizado na função
 
     if not calendario.empty:
         contagem = calendario.groupby('Data').sum()
