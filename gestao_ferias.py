@@ -386,4 +386,5 @@ with aba3:
     else:
         st.info(t("nenhuma_ferias"))
 
-    st.markdown("<p style='font-size:10px; text-align:right;'>Powered by NN ®</p>", unsafe_allow_html=True)
+    #st.markdown("<p style='font-size:10px; text-align:right;'>Powered by NN ®</p>", unsafe_allow_html=True)
+st.sidebar.markdown("<p style='font-size:10px; text-align:center;'>Powered by NN ®</p>", unsafe_allow_html=True)
