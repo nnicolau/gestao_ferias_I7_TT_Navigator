@@ -1,5 +1,5 @@
 [pt]
-titulo = "📅 Sistema de Gestão de Férias - INDICA7"
+titulo = "📅 Sistema de Gestão de Férias -I7- NAVIGATOR "
 configuracoes = "Configurações"
 max_ferias_simultaneas = "Máximo em férias simultâneas"
 config_atualizada = "Configuração atualizada!"
@@ -48,7 +48,7 @@ ano_ferias = "Ano de Referência"
 erro_dias_excedidos = "Excedeu o limite de dias para {ano}. Já usados: {usado}, disponível: {disponivel}."
 
 [en]
-titulo = "📅 Vacation Management System - INDICA7"
+titulo = "📅 Vacation Management System -I7- NAVIGATOR"
 configuracoes = "Settings"
 max_ferias_simultaneas = "Max simultaneous vacations"
 config_atualizada = "Settings updated!"
