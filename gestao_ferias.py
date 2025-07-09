@@ -385,3 +385,5 @@ with aba3:
         st.pyplot(fig)
     else:
         st.info(t("nenhuma_ferias"))
+
+st.markdown("<p style='font-size:10px; text-align:right;'>Powered by NN ®</p>", unsafe_allow_html=True)
