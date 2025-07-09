@@ -8,29 +8,27 @@ import bcrypt
 import os
 import toml
 
-# --- Load translations ---
+# --- Carregar traduções ---
 with open("traducao.toml", "r", encoding="utf-8") as f:
     traducoes = toml.load(f)
 
-# --- Translation function ---
+# --- Função de tradução ---
 def t(chave):
     lang = st.session_state.get("lang", "pt")
     return traducoes.get(lang, {}).get(chave, chave)
 
-# --- Language selection ---
+# --- Seleção de idioma ---
 if "lang" not in st.session_state:
     st.session_state.lang = "pt"
 
-st.sidebar.selectbox("🌐 Língua / Language", ["pt", "en"], 
-                    index=0 if st.session_state.lang == "pt" else 1, 
-                    key="lang")
+st.sidebar.selectbox("🌐 Língua / Language", ["pt", "en"], index=0 if st.session_state.lang == "pt" else 1, key="lang")
 
-# --- Load environment variables ---
+# --- Carregar variáveis de ambiente ---
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    st.warning("dotenv not installed. Using default variables.")
+    st.warning("dotenv não está instalado. Usando variáveis padrão.")
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'fallback-secret-key-123')
 PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
@@ -38,7 +36,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- Authentication ---
+# --- Autenticação ---
 def check_password():
     if 'authenticated' in st.session_state and st.session_state.authenticated:
         return True
@@ -55,12 +53,12 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- Page configuration ---
+# --- Configuração da página ---
 st.set_page_config(page_title=t("titulo"), layout="wide")
 st.image("Logotipo.png", width=100)
 st.title(t("titulo"))
 
-# --- Sidebar settings ---
+# --- Sidebar: configurações ---
 with st.sidebar:
     st.header(t("configuracoes"))
     res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
@@ -70,7 +68,7 @@ with st.sidebar:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
         st.success(t("config_atualizada"))
 
-# Helper functions
+# Funções auxiliares
 def calcular_dias_uteis(inicio, fim):
     inicio = pd.to_datetime(inicio)
     fim = pd.to_datetime(fim)
@@ -124,43 +122,32 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 
     return True, None, None
 
-# --- Tab management with auto-refresh ---
+# --- Controle de Abas com Atualização de Dados ---
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = None
-    
-    # Define tabs
+
+# Definir abas
 tab1, tab2, tab3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
-# Detect active tab
-current_tab_active = None
+# Determinar aba ativa
+current_tab = None
 if tab1:
-    current_tab_active = "gestao_funcionarios"
+    current_tab = "gestao_funcionarios"
 elif tab2:
-    current_tab_active = "gestao_ferias"
+    current_tab = "gestao_ferias"
 elif tab3:
-    current_tab_active = "relatorios_ferias"
+    current_tab = "relatorios_ferias"
 
-# Verificar mudança de aba e forçar atualização
-if 'current_tab' not in st.session_state or st.session_state.current_tab != current_tab_active:
-    st.session_state.current_tab = current_tab_active
-    st.session_state.force_refresh = True
-
-# Se precisar atualizar, limpar cache e recarregar
-if st.session_state.get('force_refresh', False):
-    st.session_state.force_refresh = False
-    try:
-        # Limpa todos os caches de dados
-        if hasattr(st, 'cache_data'):
-            st.cache_data.clear()
-    except Exception as e:
-        st.error(f"Erro ao limpar cache: {e}")
+# Forçar atualização ao mudar de aba
+if st.session_state.current_tab != current_tab:
+    st.session_state.current_tab = current_tab
     st.rerun()
 
-# --- Tab 1: Employee Management ---
+# --- Aba 1: Gestão de Funcionários ---
 with tab1:
     st.subheader(t("gestao_funcionarios"))
     
-    # Always query fresh data when entering this tab
+    # Busca direta ao banco de dados (sem cache)
     funcionarios = pd.DataFrame(
         supabase.table("funcionarios")
         .select("*")
@@ -180,7 +167,6 @@ with tab1:
                 "dias_ferias": dias_ferias
             }).execute()
             st.success(t("funcionario_adicionado"))
-            st.session_state.force_refresh = True
             st.rerun()
 
     if not funcionarios.empty:
@@ -201,20 +187,18 @@ with tab1:
                                 "dias_ferias": novos_dias
                             }).eq("id", row['id']).execute()
                             st.success(t("atualizado"))
-                            st.session_state.force_refresh = True
                             st.rerun()
                     with col2:
                         if st.form_submit_button(t("apagar")):
                             supabase.table("funcionarios").delete().eq("id", row['id']).execute()
                             st.warning(t("removido"))
-                            st.session_state.force_refresh = True
                             st.rerun()
 
-# --- Tab 2: Vacation Management ---
+# --- Aba 2: Gestão de Férias ---
 with tab2:
     st.subheader(t("gestao_ferias"))
     
-    # Always query fresh data when entering this tab
+    # Busca direta ao banco de dados (sem cache)
     funcionarios_ferias = pd.DataFrame(
         supabase.table("funcionarios")
         .select("id", "nome", "dias_ferias")
@@ -243,9 +227,7 @@ with tab2:
             with col2:
                 data_fim = st.date_input(t("fim"))
             with col3:
-                ano_ferias = st.number_input(t("ano_ferias"), min_value=2000, 
-                                          max_value=datetime.now().year + 1, 
-                                          value=datetime.now().year)
+                ano_ferias = st.number_input(t("ano_ferias"), min_value=2000, max_value=datetime.now().year + 1, value=datetime.now().year)
 
             if st.form_submit_button(t("marcar")):
                 if pd.to_datetime(data_fim) < pd.to_datetime(data_inicio):
@@ -277,7 +259,6 @@ with tab2:
                                         "ano": ano_ferias
                                     }).execute()
                                     st.success(t("ferias_marcadas"))
-                                    st.session_state.force_refresh = True
                                     st.rerun()
 
         if not ferias.empty:
@@ -314,20 +295,18 @@ with tab2:
                                                     "dias": dias
                                                 }).eq("id", row['id']).execute()
                                                 st.success(t("ferias_atualizadas"))
-                                                st.session_state.force_refresh = True
                                                 st.rerun()
                         with col2:
                             if st.form_submit_button(t("apagar")):
                                 supabase.table("ferias").delete().eq("id", row['id']).execute()
                                 st.warning(t("ferias_removidas"))
-                                st.session_state.force_refresh = True
                                 st.rerun()
 
-
+# --- Aba 3: Relatórios de Férias ---
 with tab3:
     st.subheader(t("relatorios_ferias"))
     
-    # Always query fresh data when entering this tab
+    # Busca direta ao banco de dados (sem cache)
     dados_ferias = pd.DataFrame(
         supabase.table("ferias")
         .select("*", "funcionarios(id, nome, dias_ferias)")
@@ -350,7 +329,6 @@ with tab3:
         st.subheader(t("proximas_ferias"))
         st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim', 'ano']])
 
-        # Past vacations - shaded with style
         ferias_df_sorted = dados_ferias.sort_values(by='data_inicio')
         def highlight_passadas(row):
             return ['background-color: #f0f0f0' if row['data_fim'] < hoje else '' for _ in row]
@@ -383,7 +361,6 @@ with tab3:
             t("restante")
         ]])
 
-        # Overlap visualization
         st.subheader(t("sobreposicao"))
         dados_ferias['data_inicio'] = pd.to_datetime(dados_ferias['data_inicio'])
         dados_ferias['data_fim'] = pd.to_datetime(dados_ferias['data_fim'])
@@ -443,7 +420,6 @@ with tab3:
     else:
         st.info(t("nenhuma_ferias"))
 
-# Footer
 with st.sidebar:
     st.markdown("""
         <div style='height:300px;'></div>
