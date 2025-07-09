@@ -217,8 +217,7 @@ with aba2:
     st.subheader(t("gestao_ferias"))
     ferias['nome'] = ferias['funcionarios'].apply(lambda f: f['nome'] if isinstance(f, dict) else '')
     st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias']])
-   
-    # funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
+    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
 
     if not funcionarios.empty:
         with st.form("marcar_ferias", clear_on_submit=True):
