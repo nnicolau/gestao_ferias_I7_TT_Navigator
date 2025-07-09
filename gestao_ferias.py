@@ -123,14 +123,18 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 
     return True, None, None
 
+if 'current_tab' not in st.session_state:
+    st.session_state.current_tab = None
+    st.session_state.force_refresh = True  # Inicializa force_refresh
+
 # Definir abas
 aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
 # --- Verificação de Mudança de Aba ---
-if 'current_tab' not in st.session_state:
-    st.session_state.current_tab = None
-    st.session_state.force_refresh = True  # Forçar carga inicial
-
+if 'current_tab' not in st.session_state or st.session_state.current_tab != current_tab_active:
+    st.session_state.current_tab = current_tab_active
+    st.session_state.force_refresh = True
+    
 # Determinar qual aba está ativa
 current_tab_active = None
 if aba1:
@@ -145,12 +149,13 @@ if st.session_state.current_tab != current_tab_active or st.session_state.force_
     st.session_state.current_tab = current_tab_active
     st.session_state.force_refresh = False
 
-  # Limpar caches relevantes se estiver usando @st.cache_data
-    st.cache_data.clear()
-    
-    # Forçar recarregamento
+ # Se precisar atualizar, limpar cache e recarregar
+if st.session_state.get('force_refresh', False):
+    st.session_state.force_refresh = False
+    # Limpar caches se estiver usando @st.cache_data
+    if 'cache_data' in st.__dict__:  # Verifica se st.cache_data existe
+        st.cache_data.clear()
     st.rerun()
-
 
 # Conteúdo das abas
 with aba1:
