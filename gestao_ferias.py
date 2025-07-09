@@ -388,7 +388,8 @@ with aba3:
 
 with st.sidebar:
     st.markdown("""
-        <div style='margin-top:50px; font-size:10px; text-align:center;'>
+        <div style='height:300px;'></div>
+        <div style='font-size:10px; text-align:center;'>
             Powered by NN ®
         </div>
     """, unsafe_allow_html=True)
