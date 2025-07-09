@@ -61,6 +61,12 @@ st.title(t("titulo"))
 # --- Sidebar: configurações ---
 with st.sidebar:
     st.header(t("configuracoes"))
+
+    # Mostra a URL do Supabase (apenas para visualização)
+    st.markdown("**Configuração do Banco de Dados**")
+    st.code(f"SUPABASE_URL: {os.getenv('SUPABASE_URL')}", language="bash")
+
+    
     res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
     max_atual = res.data['max_ferias_simultaneas']
     novo_max = st.number_input(t("max_ferias_simultaneas"), min_value=1, value=max_atual)
