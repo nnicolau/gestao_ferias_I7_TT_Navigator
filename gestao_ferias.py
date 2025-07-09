@@ -68,7 +68,6 @@ with st.sidebar:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
         st.success(t("config_atualizada"))
 
-
 # Funções auxiliares
 def calcular_dias_uteis(inicio, fim):
     inicio = pd.to_datetime(inicio)
@@ -124,7 +123,7 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 
     return True, None, None
 
-# Abas
+# Definir abas
 aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
 # Verificar se a aba mudou
@@ -145,6 +144,7 @@ if st.session_state.current_tab != current_tab_active:
     st.session_state.current_tab = current_tab_active
     st.rerun()
 
+# Conteúdo das abas
 with aba1:
     st.subheader(t("gestao_funcionarios"))
 
