@@ -127,27 +127,46 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
 # Verificar se a aba mudou
-if 'current_tab' not in st.session_state:
-    st.session_state.current_tab = None
-
+if "aba_atual" not in st.session_state:
+    st.session_state.aba_atual = None
+    
 # Determinar qual aba está ativa
-current_tab_active = None
+aba_ativa = None
 if aba1:
-    current_tab_active = "gestao_funcionarios"
+    aba_ativa = "gestao_funcionarios"
 elif aba2:
-    current_tab_active = "gestao_ferias"
+    aba_ativa = "gestao_ferias"
 elif aba3:
-    current_tab_active = "relatorios_ferias"
-
+    aba_ativa = "relatorios_ferias"
+    
 # Se a aba mudou, atualizar os dados
-if st.session_state.current_tab != current_tab_active:
-    st.session_state.current_tab = current_tab_active
-    st.rerun()
+if st.session_state.aba_atual != aba_ativa:
+    st.session_state.aba_atual = aba_ativa
+    st.session_state.dados_carregados = False
+    
+# Se os dados precisam ser recarregados, procurar do banco de dados
+if not st.session_state.get("dados_carregados", False):
+    # Recarrega TODOS os dados do Supabase
+    funcionarios = pd.DataFrame(
+        supabase.table("funcionarios").select("*").order("id").execute().data
+    )
+    ferias = pd.DataFrame(
+        supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
+    )
+    st.session_state.dados_funcionarios = funcionarios
+    st.session_state.dados_ferias = ferias
+    st.session_state.dados_carregados = True  # Marcar como carregado
+else:
+    # Se já carregado, pega do cache (session_state)
+    funcionarios = st.session_state.dados_funcionarios
+    ferias = st.session_state.dados_ferias
+
 
 # Conteúdo das abas
 with aba1:
     st.subheader(t("gestao_funcionarios"))
-
+    st.dataframe(funcionarios[['id', 'nome', 'data_admissao', 'dias_ferias']])
+    
     with st.form("form_funcionario", clear_on_submit=True):
         nome = st.text_input(t("nome"))
         data_admissao = st.date_input(t("data_admissao"))
@@ -196,7 +215,10 @@ with aba1:
 
 with aba2:
     st.subheader(t("gestao_ferias"))
-    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
+    ferias['nome'] = ferias['funcionarios'].apply(lambda f: f['nome'] if isinstance(f, dict) else '')
+    st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias']])
+   
+    # funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
 
     if not funcionarios.empty:
         with st.form("marcar_ferias", clear_on_submit=True):
