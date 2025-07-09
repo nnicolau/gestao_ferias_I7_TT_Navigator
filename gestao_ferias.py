@@ -127,6 +127,24 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 # Abas
 aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
+# Verificar se a aba mudou
+if 'current_tab' not in st.session_state:
+    st.session_state.current_tab = None
+
+# Determinar qual aba está ativa
+current_tab_active = None
+if aba1:
+    current_tab_active = "gestao_funcionarios"
+elif aba2:
+    current_tab_active = "gestao_ferias"
+elif aba3:
+    current_tab_active = "relatorios_ferias"
+
+# Se a aba mudou, atualizar os dados
+if st.session_state.current_tab != current_tab_active:
+    st.session_state.current_tab = current_tab_active
+    st.rerun()
+
 with aba1:
     st.subheader(t("gestao_funcionarios"))
 
