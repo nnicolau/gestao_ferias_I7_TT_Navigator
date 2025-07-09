@@ -128,8 +128,7 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
 with aba1:
-    if st.session_state.aba_ativa == abas[0]:
-        st.subheader(t("gestao_funcionarios"))
+    st.subheader(t("gestao_funcionarios"))
 
     with st.form("form_funcionario", clear_on_submit=True):
         nome = st.text_input(t("nome"))
@@ -178,8 +177,7 @@ with aba1:
                             st.rerun()
 
 with aba2:
-    if st.session_state.aba_ativa == abas[1]:
-        st.subheader(t("gestao_ferias"))
+    st.subheader(t("gestao_ferias"))
     funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
 
     if not funcionarios.empty:
@@ -276,9 +274,7 @@ with aba2:
                                 st.rerun()
 
 with aba3:
-    if st.session_state.aba_ativa == abas[2]:
-        st.subheader(t("relatorios_ferias"))
-
+    st.subheader(t("relatorios_ferias"))
 
     dados_ferias = supabase.table("ferias").select("*", "funcionarios(id, nome, dias_ferias)").execute().data
     ferias_df = pd.DataFrame(dados_ferias)
