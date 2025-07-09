@@ -127,8 +127,8 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 # --- Tab management with auto-refresh ---
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = None
-   
-# Define tabs
+    
+    # Define tabs
 tab1, tab2, tab3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
 # Detect active tab
@@ -140,13 +140,21 @@ elif tab2:
 elif tab3:
     current_tab_active = "relatorios_ferias"
 
-# Check for tab change
-if st.session_state.current_tab != current_tab:
-    st.session_state.current_tab = current_tab
-    # Limpa TODOS os caches e força busca no banco de dados
-    st.cache_data.clear()
-    st.rerun()  # Isso recarrega TODOS os dados
+# Verificar mudança de aba e forçar atualização
+if 'current_tab' not in st.session_state or st.session_state.current_tab != current_tab_active:
+    st.session_state.current_tab = current_tab_active
+    st.session_state.force_refresh = True
 
+# Se precisar atualizar, limpar cache e recarregar
+if st.session_state.get('force_refresh', False):
+    st.session_state.force_refresh = False
+    try:
+        # Limpa todos os caches de dados
+        if hasattr(st, 'cache_data'):
+            st.cache_data.clear()
+    except Exception as e:
+        st.error(f"Erro ao limpar cache: {e}")
+    st.rerun()
 
 # --- Tab 1: Employee Management ---
 with tab1:
