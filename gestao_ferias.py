@@ -126,9 +126,10 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 # Definir abas
 aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
-# Verificar se a aba mudou
+# --- Verificação de Mudança de Aba ---
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = None
+    st.session_state.force_refresh = True  # Forçar carga inicial
 
 # Determinar qual aba está ativa
 current_tab_active = None
@@ -139,10 +140,17 @@ elif aba2:
 elif aba3:
     current_tab_active = "relatorios_ferias"
 
-# Se a aba mudou, atualizar os dados
-if st.session_state.current_tab != current_tab_active:
+# Se a aba mudou ou é a primeira carga, atualizar os dados
+if st.session_state.current_tab != current_tab_active or st.session_state.force_refresh:
     st.session_state.current_tab = current_tab_active
+    st.session_state.force_refresh = False
+
+  # Limpar caches relevantes se estiver usando @st.cache_data
+    st.cache_data.clear()
+    
+    # Forçar recarregamento
     st.rerun()
+
 
 # Conteúdo das abas
 with aba1:
@@ -197,7 +205,8 @@ with aba1:
 with aba2:
     st.subheader(t("gestao_ferias"))
     funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
-
+    ferias_data = supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
+    
     if not funcionarios.empty:
         with st.form("marcar_ferias", clear_on_submit=True):
             funcionario_id = st.selectbox(
@@ -253,7 +262,7 @@ with aba2:
         if not ferias.empty:
             ferias['nome'] = ferias['funcionarios'].apply(lambda f: f['nome'] if isinstance(f, dict) else '')
             st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias']])
-
+            
             with st.expander(t("editar_apagar_ferias")):
                 for _, row in ferias.iterrows():
                     with st.form(f"editar_ferias_{row['id']}"):
