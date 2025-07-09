@@ -68,6 +68,7 @@ with st.sidebar:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
         st.success(t("config_atualizada"))
 
+
 # Funções auxiliares
 def calcular_dias_uteis(inicio, fim):
     inicio = pd.to_datetime(inicio)
@@ -118,40 +119,277 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
         fim = pd.to_datetime(f['data_fim'])
 
         if not (nova_fim < ini or nova_inicio > fim):
+            # Sobreposição encontrada
             return False, ini.strftime('%d/%m/%Y'), fim.strftime('%d/%m/%Y')
 
     return True, None, None
 
-# --- Gestão de abas com atualização automática ---
-abas = {
-    t("gestao_funcionarios"): "funcionarios",
-    t("gestao_ferias"): "ferias",
-    t("relatorios_ferias"): "relatorios"
-}
+# Abas
+aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
-aba_atual = st.radio("\ud83d\udccb", list(abas.keys()), horizontal=True)
+with aba1:
+    if st.session_state.aba_ativa == abas[0]:
+        st.subheader(t("gestao_funcionarios"))
 
-if "aba_ativa" not in st.session_state:
-    st.session_state.aba_ativa = ""
+    with st.form("form_funcionario", clear_on_submit=True):
+        nome = st.text_input(t("nome"))
+        data_admissao = st.date_input(t("data_admissao"))
+        dias_ferias = st.number_input(t("dias_ferias_ano"), min_value=1, value=22)
+        if st.form_submit_button(t("adicionar")):
+            supabase.table("funcionarios").insert({
+                "nome": nome,
+                "data_admissao": data_admissao.isoformat(),
+                "dias_ferias": dias_ferias
+            }).execute()
+            st.success(t("funcionario_adicionado"))
+            st.rerun()
 
-if aba_atual != st.session_state.aba_ativa:
-    st.session_state.aba_ativa = aba_atual
-    st.rerun()
+    funcionarios = pd.DataFrame(
+        supabase.table("funcionarios")
+        .select("*")
+        .order("id")
+        .execute()
+        .data
+    )
 
-# --- Conteúdo das abas ---
-if st.session_state.aba_ativa == t("gestao_funcionarios"):
-    # Colar aqui o conteúdo da aba 1
-    pass
+    if not funcionarios.empty:
+        st.dataframe(funcionarios[['id', 'nome', 'data_admissao', 'dias_ferias']])
 
-elif st.session_state.aba_ativa == t("gestao_ferias"):
-    # Colar aqui o conteúdo da aba 2
-    pass
+        with st.expander(f"{t('editar_apagar_ferias')} (Funcionários)"):
+            for _, row in funcionarios.iterrows():
+                with st.form(f"edit_func_{row['id']}"):
+                    novo_nome = st.text_input(t("nome"), value=row['nome'])
+                    nova_data = st.date_input(t("data_admissao"), value=pd.to_datetime(row['data_admissao']))
+                    novos_dias = st.number_input(t("dias_ferias_ano"), min_value=1, value=row['dias_ferias'])
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.form_submit_button(t("atualizar")):
+                            supabase.table("funcionarios").update({
+                                "nome": novo_nome,
+                                "data_admissao": nova_data.isoformat(),
+                                "dias_ferias": novos_dias
+                            }).eq("id", row['id']).execute()
+                            st.success(t("atualizado"))
+                            st.rerun()
+                    with col2:
+                        if st.form_submit_button(t("apagar")):
+                            supabase.table("funcionarios").delete().eq("id", row['id']).execute()
+                            st.warning(t("removido"))
+                            st.rerun()
 
-elif st.session_state.aba_ativa == t("relatorios_ferias"):
-    # Colar aqui o conteúdo da aba 3
-    pass
+with aba2:
+    if st.session_state.aba_ativa == abas[1]:
+        st.subheader(t("gestao_ferias"))
+    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
 
-# --- Rodapé ---
+    if not funcionarios.empty:
+        with st.form("marcar_ferias", clear_on_submit=True):
+            funcionario_id = st.selectbox(
+                t("nome"),
+                funcionarios['id'],
+                format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0]
+            )
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                data_inicio = st.date_input(t("inicio"))
+            with col2:
+                data_fim = st.date_input(t("fim"))
+            with col3:
+                ano_ferias = st.number_input(t("ano_ferias"), min_value=2000, max_value=datetime.now().year + 1, value=datetime.now().year)
+
+            if st.form_submit_button(t("marcar")):
+                if pd.to_datetime(data_fim) < pd.to_datetime(data_inicio):
+                    st.error(t("erro_data_final"))
+                else:
+                    dias = calcular_dias_uteis(data_inicio, data_fim)
+                    if dias == 0:
+                        st.error(t("erro_sem_dias_uteis"))
+                    else:
+                        # Verificar duplicidade para o mesmo funcionário
+                        ok_dup, inicio_dup, fim_dup = verificar_duplicidade_ferias(data_inicio, data_fim, funcionario_id)
+                        if not ok_dup:
+                            st.error(t("erro_duplicado").format(inicio=inicio_dup, fim=fim_dup))
+                        else:
+                            ok, dia_conflito = verificar_limite_ferias(data_inicio, data_fim, funcionario_id)
+                            if not ok:
+                                st.error(t("erro_excesso_pessoas").format(dia=dia_conflito))
+                            else:
+                                # Verificar limite anual de dias por funcionário
+                                ferias_ano = supabase.table("ferias").select("dias").eq("funcionario_id", funcionario_id).eq("ano", ano_ferias).execute().data
+                                usado_ano = sum([f['dias'] for f in ferias_ano])
+                                dias_disponiveis = funcionarios.loc[funcionarios['id'] == funcionario_id, 'dias_ferias'].values[0]
+                                if usado_ano + dias > dias_disponiveis:
+                                    st.error(t("erro_dias_excedidos").format(usado=usado_ano, disponivel=dias_disponiveis, ano=ano_ferias))
+                                else:
+                                    supabase.table("ferias").insert({
+                                        "funcionario_id": funcionario_id,
+                                        "data_inicio": data_inicio.isoformat(),
+                                        "data_fim": data_fim.isoformat(),
+                                        "dias": dias,
+                                        "ano": ano_ferias
+                                    }).execute()
+                                    st.success(t("ferias_marcadas"))
+                                    st.rerun()
+
+        ferias_data = supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
+        ferias = pd.DataFrame(ferias_data)
+
+        if not ferias.empty:
+            ferias['nome'] = ferias['funcionarios'].apply(lambda f: f['nome'] if isinstance(f, dict) else '')
+            st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias']])
+
+            with st.expander(t("editar_apagar_ferias")):
+                for _, row in ferias.iterrows():
+                    with st.form(f"editar_ferias_{row['id']}"):
+                        st.markdown(f"**{row['nome']}**")
+                        novo_inicio = st.date_input(t("inicio"), value=pd.to_datetime(row['data_inicio']), key=f"inicio_{row['id']}")
+                        novo_fim = st.date_input(t("fim"), value=pd.to_datetime(row['data_fim']), key=f"fim_{row['id']}")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button(t("atualizar")):
+                                if novo_fim < novo_inicio:
+                                    st.error(t("erro_data_final"))
+                                else:
+                                    dias = calcular_dias_uteis(novo_inicio, novo_fim)
+                                    if dias == 0:
+                                        st.error(t("erro_sem_dias_uteis"))
+                                    else:
+                                        ok_dup, inicio_dup, fim_dup = verificar_duplicidade_ferias(novo_inicio, novo_fim, row['funcionario_id'], ignorar_id=row['id'])
+                                        if not ok_dup:
+                                            st.error(t("erro_duplicado").format(inicio=inicio_dup, fim=fim_dup))
+                                        else:
+                                            ok, dia_conflito = verificar_limite_ferias(novo_inicio, novo_fim, row['funcionario_id'])
+                                            if not ok:
+                                                st.error(t("conflito_ferias").format(dia=dia_conflito))
+                                            else:
+                                                supabase.table("ferias").update({
+                                                    "data_inicio": novo_inicio.isoformat(),
+                                                    "data_fim": novo_fim.isoformat(),
+                                                    "dias": dias
+                                                }).eq("id", row['id']).execute()
+                                                st.success(t("ferias_atualizadas"))
+                                                st.rerun()
+                        with col2:
+                            if st.form_submit_button(t("apagar")):
+                                supabase.table("ferias").delete().eq("id", row['id']).execute()
+                                st.warning(t("ferias_removidas"))
+                                st.rerun()
+
+with aba3:
+    if st.session_state.aba_ativa == abas[2]:
+        st.subheader(t("relatorios_ferias"))
+
+
+    dados_ferias = supabase.table("ferias").select("*", "funcionarios(id, nome, dias_ferias)").execute().data
+    ferias_df = pd.DataFrame(dados_ferias)
+
+    if not ferias_df.empty:
+        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio']).dt.date
+        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim']).dt.date
+        ferias_df['funcionario'] = ferias_df['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
+        ferias_df['funcionario_id'] = ferias_df['funcionarios'].apply(lambda x: x.get('id', None) if isinstance(x, dict) else None)
+        ferias_df['dias_ferias'] = ferias_df['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
+
+        st.subheader(t("ferias_marcadas_titulo"))
+        st.dataframe(ferias_df[['funcionario', 'data_inicio', 'data_fim', 'dias', 'ano']])
+
+        hoje = datetime.now().date()
+        proximas = ferias_df[ferias_df['data_inicio'] >= hoje].sort_values(by='data_inicio')
+        st.subheader(t("proximas_ferias"))
+        st.dataframe(proximas[['funcionario', 'data_inicio', 'data_fim', 'ano']])
+
+        # Férias passadas - sombrear com style
+        ferias_df_sorted = ferias_df.sort_values(by='data_inicio')
+        def highlight_passadas(row):
+            return ['background-color: #f0f0f0' if row['data_fim'] < hoje else '' for _ in row]
+
+        st.subheader(t("historico_futuras"))
+        st.dataframe(
+            ferias_df_sorted[['funcionario', 'data_inicio', 'data_fim', 'dias', 'ano']]
+            .style.apply(highlight_passadas, axis=1)
+        )
+
+        st.subheader(t("resumo_funcionario"))
+        resumo = ferias_df.groupby(['funcionario', 'funcionario_id', 'ano', 'dias_ferias']).agg(
+            Usado=('dias', 'sum')
+        ).reset_index()
+        resumo['Disponivel'] = resumo['dias_ferias']
+        resumo['Restante'] = resumo['Disponivel'] - resumo['Usado']
+        resumo.rename(columns={
+            'funcionario': t("nome"),
+            'ano': t("ano_ferias"),
+            'Usado': t("usado"),
+            'Disponivel': t("disponivel"),
+            'Restante': t("restante")
+        }, inplace=True)
+
+        st.dataframe(resumo[[
+            t("nome"),
+            t("ano_ferias"),
+            t("usado"),
+            t("disponivel"),
+            t("restante")
+        ]])
+
+        st.subheader(t("sobreposicao"))
+        ferias_df['data_inicio'] = pd.to_datetime(ferias_df['data_inicio'])
+        ferias_df['data_fim'] = pd.to_datetime(ferias_df['data_fim'])
+
+        fig, ax = plt.subplots(figsize=(14, 6))
+        all_dates = pd.date_range(
+            start=ferias_df['data_inicio'].min(),
+            end=ferias_df['data_fim'].max()
+        )
+
+        congestion = pd.Series(0, index=all_dates)
+        for _, row in ferias_df.iterrows():
+            mask = (all_dates >= row['data_inicio']) & (all_dates <= row['data_fim'])
+            congestion[mask] += 1
+
+        for _, row in ferias_df.iterrows():
+            avg_overlap = congestion.loc[row['data_inicio']:row['data_fim']].mean()
+            color = 'green' if avg_overlap < 1.5 else 'goldenrod' if avg_overlap < 2.5 else 'red'
+            ax.barh(
+                y=row['funcionario'],
+                width=(row['data_fim'] - row['data_inicio']).days,
+                left=row['data_inicio'],
+                color=color,
+                edgecolor='black',
+                alpha=0.7
+            )
+            if avg_overlap > 1:
+                ax.text(
+                    x=row['data_inicio'] + (row['data_fim'] - row['data_inicio']) / 2,
+                    y=row['funcionario'],
+                    s=f"{int(round(avg_overlap))}",
+                    va='center',
+                    ha='center',
+                    fontsize=10,
+                    bbox=dict(facecolor='white', alpha=0.8)
+                )
+
+        for date in congestion[congestion >= 3].index:
+            ax.axvline(x=date, color='darkred', alpha=0.3, linestyle='--')
+
+        ax.set_xlabel(t("data"))
+        ax.set_ylabel(t("nome"))
+        ax.set_title(t("titulo_grafico"), pad=15)
+        ax.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%d/%m'))
+        plt.xticks(rotation=45)
+
+        legend_elements = [
+            plt.Rectangle((0, 0), 1, 1, color='green', label=t("sem_sobreposicao")),
+            plt.Rectangle((0, 0), 1, 1, color='goldenrod', label=t("duas_pessoas")),
+            plt.Rectangle((0, 0), 1, 1, color='red', label=t("tres_pessoas"))
+        ]
+        ax.legend(handles=legend_elements, loc='upper right', title=t("sobreposicao"))
+
+        plt.tight_layout()
+        st.pyplot(fig)
+    else:
+        st.info(t("nenhuma_ferias"))
+
 with st.sidebar:
     st.markdown("""
         <div style='height:300px;'></div>
