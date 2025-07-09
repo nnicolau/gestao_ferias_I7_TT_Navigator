@@ -123,18 +123,14 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 
     return True, None, None
 
+# --- Inicialização do Session State para controle de abas ---
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = None
-    st.session_state.force_refresh = True  # Inicializa force_refresh
+    st.session_state.force_refresh = True
 
 # Definir abas
 aba1, aba2, aba3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
-# --- Verificação de Mudança de Aba ---
-if 'current_tab' not in st.session_state or st.session_state.current_tab != current_tab_active:
-    st.session_state.current_tab = current_tab_active
-    st.session_state.force_refresh = True
-    
 # Determinar qual aba está ativa
 current_tab_active = None
 if aba1:
@@ -144,17 +140,18 @@ elif aba2:
 elif aba3:
     current_tab_active = "relatorios_ferias"
 
-# Se a aba mudou ou é a primeira carga, atualizar os dados
-if st.session_state.current_tab != current_tab_active or st.session_state.force_refresh:
+# Verificar mudança de aba
+if st.session_state.current_tab != current_tab_active:
     st.session_state.current_tab = current_tab_active
-    st.session_state.force_refresh = False
+    st.session_state.force_refresh = True
 
- # Se precisar atualizar, limpar cache e recarregar
+# Se precisar atualizar, limpar cache e recarregar
 if st.session_state.get('force_refresh', False):
     st.session_state.force_refresh = False
-    # Limpar caches se estiver usando @st.cache_data
-    if 'cache_data' in st.__dict__:  # Verifica se st.cache_data existe
+    try:
         st.cache_data.clear()
+    except AttributeError:
+        pass  # Ignora se st.cache_data não estiver disponível
     st.rerun()
 
 # Conteúdo das abas
@@ -172,6 +169,7 @@ with aba1:
                 "dias_ferias": dias_ferias
             }).execute()
             st.success(t("funcionario_adicionado"))
+            st.session_state.force_refresh = True
             st.rerun()
 
     funcionarios = pd.DataFrame(
@@ -200,18 +198,19 @@ with aba1:
                                 "dias_ferias": novos_dias
                             }).eq("id", row['id']).execute()
                             st.success(t("atualizado"))
+                            st.session_state.force_refresh = True
                             st.rerun()
                     with col2:
                         if st.form_submit_button(t("apagar")):
                             supabase.table("funcionarios").delete().eq("id", row['id']).execute()
                             st.warning(t("removido"))
+                            st.session_state.force_refresh = True
                             st.rerun()
 
 with aba2:
     st.subheader(t("gestao_ferias"))
     funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
-    ferias_data = supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
-    
+
     if not funcionarios.empty:
         with st.form("marcar_ferias", clear_on_submit=True):
             funcionario_id = st.selectbox(
@@ -259,6 +258,7 @@ with aba2:
                                         "ano": ano_ferias
                                     }).execute()
                                     st.success(t("ferias_marcadas"))
+                                    st.session_state.force_refresh = True
                                     st.rerun()
 
         ferias_data = supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
@@ -267,7 +267,7 @@ with aba2:
         if not ferias.empty:
             ferias['nome'] = ferias['funcionarios'].apply(lambda f: f['nome'] if isinstance(f, dict) else '')
             st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias']])
-            
+
             with st.expander(t("editar_apagar_ferias")):
                 for _, row in ferias.iterrows():
                     with st.form(f"editar_ferias_{row['id']}"):
@@ -298,11 +298,13 @@ with aba2:
                                                     "dias": dias
                                                 }).eq("id", row['id']).execute()
                                                 st.success(t("ferias_atualizadas"))
+                                                st.session_state.force_refresh = True
                                                 st.rerun()
                         with col2:
                             if st.form_submit_button(t("apagar")):
                                 supabase.table("ferias").delete().eq("id", row['id']).execute()
                                 st.warning(t("ferias_removidas"))
+                                st.session_state.force_refresh = True
                                 st.rerun()
 
 with aba3:
