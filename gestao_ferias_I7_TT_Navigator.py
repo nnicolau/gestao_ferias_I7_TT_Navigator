@@ -57,7 +57,7 @@ if not check_password():
 st.set_page_config(page_title=t("titulo"), layout="wide")
 col1, col2 = st.columns([1, 4])
 with col1:
-    st.image("Logo.png", width=400)  # Logo adicional à esquerda
+    st.image("logo2.png", width=400)  # Logo adicional à esquerda
 with col2:
     st.image("Logotipo.png", width=100)  # Logo principal
 
