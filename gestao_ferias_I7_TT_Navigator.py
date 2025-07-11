@@ -9,351 +9,347 @@ import os
 import toml
 import time
 
-# --- Carregar traduções ---
+# --- Configuração Inicial ---
+st.set_page_config(layout="wide")
+
+# --- Carregar Traduções ---
 with open("traducao.toml", "r", encoding="utf-8") as f:
     traducoes = toml.load(f)
 
-# --- Função de tradução ---
 def t(chave):
     lang = st.session_state.get("lang", "pt")
     return traducoes.get(lang, {}).get(chave, chave)
 
-# --- Configuração Inicial ---
-st.set_page_config(page_title=t("titulo"), layout="wide")
+# --- Conexão com o Supabase ---
+@st.cache_resource
+def init_supabase():
+    try:
+        supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+        
+        # Cria tabelas se não existirem
+        supabase.rpc('sql', {'query': """
+            CREATE TABLE IF NOT EXISTS configuracoes (
+                id INT PRIMARY KEY DEFAULT 1,
+                max_ferias_simultaneas INT NOT NULL DEFAULT 3
+            );
+            
+            INSERT INTO configuracoes (id, max_ferias_simultaneas) 
+            VALUES (1, 3)
+            ON CONFLICT (id) DO NOTHING;
+            
+            CREATE TABLE IF NOT EXISTS ultima_atualizacao (
+                id INT PRIMARY KEY DEFAULT 1,
+                timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            
+            INSERT INTO ultima_atualizacao (id) VALUES (1)
+            ON CONFLICT (id) DO NOTHING;
+        """}).execute()
+        
+        return supabase
+    except Exception as e:
+        st.error(f"Erro ao conectar ao banco de dados: {str(e)}")
+        st.stop()
 
-# --- Conexão com Supabase ---
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-# --- Sistema de Atualização em Tempo Real Alternativo ---
-class StateManager:
-    def __init__(self, supabase_client):
-        self.supabase = supabase_client
-        self.last_update = None
-    
-    def get_last_update(self):
-        try:
-            res = self.supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).execute()
-            return pd.to_datetime(res.data[0]['timestamp']) if res.data else None
-        except Exception as e:
-            st.error(f"Erro ao obter última atualização: {str(e)}")
-            return None
-    
-    def mark_update(self):
-        try:
-            self.supabase.table("ultima_atualizacao").upsert({
-                "id": 1,
-                "timestamp": datetime.now().isoformat()
-            }).execute()
-            return True
-        except Exception as e:
-            st.error(f"Erro ao marcar atualização: {str(e)}")
-            return False
-
-state_manager = StateManager(supabase)
+supabase = init_supabase()
 
 # --- Autenticação ---
-def check_password():
-    if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
-    
-    if st.session_state.authenticated:
+def check_auth():
+    if 'auth' not in st.session_state:
+        st.session_state.auth = False
+        
+    if st.session_state.auth:
         return True
         
-    password = st.text_input(t("senha_acesso"), type="password", key="pw_input")
+    password = st.text_input(t("senha_acesso"), type="password")
     if password and bcrypt.checkpw(password.encode(), os.getenv('PASSWORD_HASH').encode()):
-        st.session_state.authenticated = True
-        st.session_state.last_update = state_manager.get_last_update()
+        st.session_state.auth = True
         st.rerun()
     elif password:
         st.error(t("senha_incorreta"))
     return False
 
-if not check_password():
+if not check_auth():
     st.stop()
 
-# --- Layout Principal ---
-col1, col2 = st.columns([1, 4])
-with col1:
-    st.image("logo2.png", width=400)
-with col2:
-    st.image("Logotipo.png", width=100)
+# --- Gerenciamento de Estado ---
+class StateManager:
+    def get_last_update(self):
+        try:
+            res = supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).execute()
+            return pd.to_datetime(res.data[0]['timestamp']) if res.data else None
+        except Exception as e:
+            st.error(f"Erro ao verificar atualizações: {str(e)}")
+            return None
+    
+    def mark_update(self):
+        try:
+            supabase.table("ultima_atualizacao").upsert({"id": 1, "timestamp": datetime.now().isoformat()}).execute()
+            return True
+        except Exception as e:
+            st.error(f"Erro ao registrar atualização: {str(e)}")
+            return False
 
+state = StateManager()
+
+# --- Interface Principal ---
 st.title(t("titulo"))
+st.sidebar.header(t("configuracoes"))
 
-# --- Sidebar ---
-with st.sidebar:
-    st.header(t("configuracoes"))
-    
-    # Seleção de idioma
-    lang = st.selectbox("🌐 Língua / Language", ["pt", "en"], index=0 if st.session_state.get("lang", "pt") == "pt" else 1)
-    if lang != st.session_state.get("lang"):
-        st.session_state.lang = lang
-        st.rerun()
-    
-    # Configuração máxima de férias
-    res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
-    max_atual = res.data['max_ferias_simultaneas']
-    novo_max = st.number_input(t("max_ferias_simultaneas"), min_value=1, value=max_atual)
-    
-    if novo_max != max_atual:
-        supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
-        if state_manager.mark_update():
-            st.success(t("config_atualizada"))
-            time.sleep(1)
-            st.rerun()
+# Controle de Idioma
+lang = st.sidebar.selectbox("🌐 Idioma", ["pt", "en"], index=0 if st.session_state.get("lang", "pt") == "pt" else 1)
+if lang != st.session_state.get("lang"):
+    st.session_state.lang = lang
+    st.rerun()
 
-# --- Funções Auxiliares ---
+# Configuração Máxima de Férias
+try:
+    config = supabase.table("configuracoes").select("*").eq("id", 1).execute().data[0]
+    max_ferias = st.sidebar.number_input(t("max_ferias_simultaneas"), value=config['max_ferias_simultaneas'], min_value=1)
+    
+    if max_ferias != config['max_ferias_simultaneas']:
+        supabase.table("configuracoes").update({"max_ferias_simultaneas": max_ferias}).eq("id", 1).execute()
+        state.mark_update()
+        st.sidebar.success(t("config_atualizada"))
+except Exception as e:
+    st.error(f"Erro nas configurações: {str(e)}")
+
+# --- Funções Principais ---
 def calcular_dias_uteis(inicio, fim):
-    inicio = pd.to_datetime(inicio)
-    fim = pd.to_datetime(fim)
-    return len(pd.bdate_range(start=inicio, end=fim))
+    try:
+        return len(pd.bdate_range(start=inicio, end=fim))
+    except Exception:
+        return 0
 
-def verificar_limite_ferias(inicio, fim, funcionario_id):
-    inicio = pd.to_datetime(inicio)
-    fim = pd.to_datetime(fim)
-    
-    res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
-    max_simultaneas = res.data['max_ferias_simultaneas']
-    
-    ferias = supabase.table("ferias").select("*").neq("funcionario_id", funcionario_id).execute().data
-    
-    calendario = pd.Series(0, index=pd.bdate_range(start=inicio, end=fim))
-    
-    for f in ferias:
-        f_inicio = pd.to_datetime(f['data_inicio'])
-        f_fim = pd.to_datetime(f['data_fim'])
+def verificar_disponibilidade(inicio, fim, funcionario_id):
+    try:
+        # Verifica conflitos com outros funcionários
+        res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).execute()
+        limite = res.data[0]['max_ferias_simultaneas']
         
-        periodo = pd.bdate_range(
-            start=max(f_inicio, inicio),
-            end=min(f_fim, fim)
-        )
-        calendario.loc[periodo] += 1
-    
-    conflito = calendario[calendario >= max_simultaneas]
-    return (True, None) if conflito.empty else (False, conflito.index[0].strftime('%d/%m/%Y'))
-
-# --- Verificação de Atualizações ---
-def check_for_updates():
-    if 'last_update' not in st.session_state:
-        st.session_state.last_update = state_manager.get_last_update()
-    
-    current_update = state_manager.get_last_update()
-    
-    if current_update and st.session_state.last_update:
-        if current_update > st.session_state.last_update:
-            st.session_state.last_update = current_update
-            st.rerun()
-    elif current_update:
-        st.session_state.last_update = current_update
+        ferias = supabase.table("ferias").select("*").neq("funcionario_id", funcionario_id).execute().data
+        
+        periodo = pd.date_range(start=inicio, end=fim)
+        sobreposicao = pd.Series(0, index=periodo)
+        
+        for f in ferias:
+            f_inicio = pd.to_datetime(f['data_inicio'])
+            f_fim = pd.to_datetime(f['data_fim'])
+            dias = pd.date_range(start=max(f_inicio, inicio), end=min(f_fim, fim))
+            sobreposicao.loc[dias] += 1
+        
+        conflito = sobreposicao[sobreposicao >= limite]
+        return (True, None) if conflito.empty else (False, conflito.index[0].strftime('%d/%m/%Y'))
+    except Exception:
+        return (False, "Erro na verificação")
 
 # --- Abas Principais ---
-tab1, tab2, tab3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
+tab1, tab2, tab3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios")])
 
-# Aba 1: Gestão de Funcionários
 with tab1:
-    st.subheader(t("gestao_funcionarios"))
+    st.subheader(t("funcionarios"))
     
-    # Formulário de adição
-    with st.form("form_funcionario", clear_on_submit=True):
+    # Adicionar Funcionário
+    with st.form("novo_funcionario"):
         nome = st.text_input(t("nome"))
         data_admissao = st.date_input(t("data_admissao"))
-        dias_ferias = st.number_input(t("dias_ferias_ano"), min_value=1, value=22)
+        dias_base = st.number_input(t("dias_base"), min_value=1, value=22)
         
         if st.form_submit_button(t("adicionar")):
-            supabase.table("funcionarios").insert({
-                "nome": nome,
-                "data_admissao": data_admissao.isoformat(),
-                "dias_ferias": dias_ferias
-            }).execute()
-            if state_manager.mark_update():
+            try:
+                supabase.table("funcionarios").insert({
+                    "nome": nome,
+                    "data_admissao": data_admissao.isoformat(),
+                    "dias_ferias": dias_base
+                }).execute()
+                state.mark_update()
                 st.success(t("funcionario_adicionado"))
                 time.sleep(1)
                 st.rerun()
+            except Exception as e:
+                st.error(f"Erro: {str(e)}")
     
-    # Lista de funcionários
-    funcionarios = pd.DataFrame(
-        supabase.table("funcionarios").select("*").order("id").execute().data
-    )
-    
-    if not funcionarios.empty:
-        st.dataframe(funcionarios)
+    # Lista de Funcionários
+    try:
+        funcionarios = pd.DataFrame(supabase.table("funcionarios").select("*").execute().data)
         
-        # Edição de funcionários
-        with st.expander(t("editar_funcionarios")):
+        if not funcionarios.empty:
             for _, func in funcionarios.iterrows():
-                with st.form(f"edit_func_{func['id']}"):
-                    st.write(f"**{func['nome']}**")
-                    novo_nome = st.text_input(t("nome"), value=func['nome'], key=f"nome_{func['id']}")
-                    nova_data = st.date_input(t("data_admissao"), value=pd.to_datetime(func['data_admissao']), key=f"data_{func['id']}")
-                    novos_dias = st.number_input(t("dias_ferias_ano"), min_value=1, value=func['dias_ferias'], key=f"dias_{func['id']}")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.form_submit_button(t("atualizar")):
-                            supabase.table("funcionarios").update({
-                                "nome": novo_nome,
-                                "data_admissao": nova_data.isoformat(),
-                                "dias_ferias": novos_dias
-                            }).eq("id", func['id']).execute()
-                            if state_manager.mark_update():
-                                st.success(t("atualizado"))
+                with st.expander(f"📝 {func['nome']}"):
+                    with st.form(f"editar_{func['id']}"):
+                        novo_nome = st.text_input("Nome", value=func['nome'])
+                        nova_data = st.date_input("Admissão", value=pd.to_datetime(func['data_admissao']))
+                        novos_dias = st.number_input("Dias Base", value=func['dias_ferias'], min_value=1)
+                        
+                        if st.form_submit_button("Atualizar"):
+                            try:
+                                supabase.table("funcionarios").update({
+                                    "nome": novo_nome,
+                                    "data_admissao": nova_data.isoformat(),
+                                    "dias_ferias": novos_dias
+                                }).eq("id", func['id']).execute()
+                                state.mark_update()
+                                st.success("Atualizado!")
                                 time.sleep(1)
                                 st.rerun()
-                    with col2:
-                        if st.form_submit_button(t("remover")):
-                            supabase.table("funcionarios").delete().eq("id", func['id']).execute()
-                            if state_manager.mark_update():
-                                st.success(t("removido"))
+                            except Exception as e:
+                                st.error(f"Erro: {str(e)}")
+                        
+                        if st.form_submit_button("Remover"):
+                            try:
+                                supabase.table("funcionarios").delete().eq("id", func['id']).execute()
+                                state.mark_update()
+                                st.success("Removido!")
                                 time.sleep(1)
                                 st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {str(e)}")
+    except Exception as e:
+        st.error(f"Erro ao carregar funcionários: {str(e)}")
 
-# Aba 2: Gestão de Férias
 with tab2:
-    st.subheader(t("gestao_ferias"))
+    st.subheader(t("ferias"))
     
-    # Carregar dados
-    funcionarios = pd.DataFrame(
-        supabase.table("funcionarios").select("id", "nome").execute().data
-    )
-    ferias = pd.DataFrame(
-        supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data
-    )
-    
-    # Formulário de marcação de férias
-    with st.form("form_ferias", clear_on_submit=True):
-        funcionario_id = st.selectbox(
-            t("nome"),
-            funcionarios['id'],
-            format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0]
-        )
-        col1, col2 = st.columns(2)
-        with col1:
-            data_inicio = st.date_input(t("inicio"))
-        with col2:
-            data_fim = st.date_input(t("fim"))
-        ano_ferias = st.number_input(t("ano_ferias"), min_value=2000, max_value=datetime.now().year + 1, value=datetime.now().year)
+    try:
+        # Seleção de Funcionário
+        funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome").execute().data)
+        ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome)").execute().data)
         
-        if st.form_submit_button(t("marcar")):
-            if data_fim < data_inicio:
-                st.error(t("erro_data_final"))
-            else:
-                dias = calcular_dias_uteis(data_inicio, data_fim)
-                if dias == 0:
-                    st.error(t("erro_sem_dias_uteis"))
+        # Marcador de Férias
+        with st.form("marcar_ferias"):
+            funcionario_id = st.selectbox(t("funcionario"), options=funcionarios['id'], 
+                                        format_func=lambda x: funcionarios.loc[funcionarios['id'] == x, 'nome'].values[0])
+            col1, col2 = st.columns(2)
+            with col1:
+                inicio = st.date_input(t("inicio"))
+            with col2:
+                fim = st.date_input(t("fim"))
+            ano = st.number_input(t("ano"), min_value=2000, max_value=2100, value=datetime.now().year)
+            
+            if st.form_submit_button(t("marcar")):
+                if fim < inicio:
+                    st.error(t("erro_data"))
                 else:
-                    ok, dia = verificar_limite_ferias(data_inicio, data_fim, funcionario_id)
-                    if not ok:
-                        st.error(t("erro_excesso_pessoas").format(dia=dia))
+                    dias = calcular_dias_uteis(inicio, fim)
+                    if dias == 0:
+                        st.error(t("sem_dias_uteis"))
                     else:
-                        supabase.table("ferias").insert({
-                            "funcionario_id": funcionario_id,
-                            "data_inicio": data_inicio.isoformat(),
-                            "data_fim": data_fim.isoformat(),
-                            "dias": dias,
-                            "ano": ano_ferias
-                        }).execute()
-                        if state_manager.mark_update():
-                            st.success(t("ferias_marcadas"))
-                            time.sleep(1)
-                            st.rerun()
-    
-    # Lista de férias
-    if not ferias.empty:
-        ferias['nome'] = ferias['funcionarios'].apply(lambda x: x['nome'] if isinstance(x, dict) else '')
-        st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias', 'ano']])
+                        disponivel, conflito = verificar_disponibilidade(inicio, fim, funcionario_id)
+                        if disponivel:
+                            try:
+                                supabase.table("ferias").insert({
+                                    "funcionario_id": funcionario_id,
+                                    "data_inicio": inicio.isoformat(),
+                                    "data_fim": fim.isoformat(),
+                                    "dias": dias,
+                                    "ano": ano
+                                }).execute()
+                                state.mark_update()
+                                st.success(t("ferias_marcadas"))
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {str(e)}")
+                        else:
+                            st.error(f"Conflito em {conflito}")
         
-        # Edição de férias
-        with st.expander(t("editar_ferias")):
+        # Lista de Férias
+        if not ferias.empty:
+            ferias['nome'] = ferias['funcionarios'].apply(lambda x: x['nome'] if isinstance(x, dict) else 'Desconhecido')
+            
             for _, fer in ferias.iterrows():
-                with st.form(f"edit_ferias_{fer['id']}"):
-                    st.write(f"**{fer['nome']}**")
-                    novo_inicio = st.date_input(t("inicio"), value=pd.to_datetime(fer['data_inicio']), key=f"inicio_{fer['id']}")
-                    novo_fim = st.date_input(t("fim"), value=pd.to_datetime(fer['data_fim']), key=f"fim_{fer['id']}")
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.form_submit_button(t("atualizar")):
-                            if novo_fim < novo_inicio:
-                                st.error(t("erro_data_final"))
-                            else:
-                                dias = calcular_dias_uteis(novo_inicio, novo_fim)
+                with st.expander(f"🏖️ {fer['nome']} ({fer['data_inicio']} a {fer['data_fim']})"):
+                    with st.form(f"editar_ferias_{fer['id']}"):
+                        novo_inicio = st.date_input("Início", value=pd.to_datetime(fer['data_inicio']))
+                        novo_fim = st.date_input("Fim", value=pd.to_datetime(fer['data_fim']))
+                        
+                        if st.form_submit_button("Atualizar"):
+                            try:
                                 supabase.table("ferias").update({
                                     "data_inicio": novo_inicio.isoformat(),
                                     "data_fim": novo_fim.isoformat(),
-                                    "dias": dias
+                                    "dias": calcular_dias_uteis(novo_inicio, novo_fim)
                                 }).eq("id", fer['id']).execute()
-                                if state_manager.mark_update():
-                                    st.success(t("ferias_atualizadas"))
-                                    time.sleep(1)
-                                    st.rerun()
-                    with col2:
-                        if st.form_submit_button(t("remover")):
-                            supabase.table("ferias").delete().eq("id", fer['id']).execute()
-                            if state_manager.mark_update():
-                                st.success(t("ferias_removidas"))
+                                state.mark_update()
+                                st.success("Atualizado!")
                                 time.sleep(1)
                                 st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {str(e)}")
+                        
+                        if st.form_submit_button("Cancelar Férias"):
+                            try:
+                                supabase.table("ferias").delete().eq("id", fer['id']).execute()
+                                state.mark_update()
+                                st.success("Cancelado!")
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {str(e)}")
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {str(e)}")
 
-# Aba 3: Relatórios de Férias
 with tab3:
-    st.subheader(t("relatorios_ferias"))
+    st.subheader(t("relatorios"))
     
-    dados = pd.DataFrame(
-        supabase.table("ferias").select("*", "funcionarios(nome, dias_ferias)").execute().data
-    )
-    
-    if not dados.empty:
-        # Processar dados
-        dados['data_inicio'] = pd.to_datetime(dados['data_inicio'])
-        dados['data_fim'] = pd.to_datetime(dados['data_fim'])
-        dados['nome'] = dados['funcionarios'].apply(lambda x: x['nome'] if isinstance(x, dict) else '')
-        dados['dias_ferias'] = dados['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
+    try:
+        # Dados para relatórios
+        dados = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome, dias_ferias)").execute().data)
         
-        # Relatório consolidado
-        st.subheader(t("resumo_ferias"))
-        hoje = datetime.now().date()
-        
-        # Férias futuras
-        futuras = dados[dados['data_inicio'] >= hoje]
-        if not futuras.empty:
-            st.write(t("proximas_ferias"))
-            st.dataframe(futuras[['nome', 'data_inicio', 'data_fim', 'dias']])
-        
-        # Consumo por funcionário
-        st.subheader(t("consumo_ferias"))
-        resumo = dados.groupby(['nome', 'ano']).agg(
-            Usados=('dias', 'sum'),
-            Disponíveis=('dias_ferias', 'first')
-        ).reset_index()
-        resumo['Restantes'] = resumo['Disponíveis'] - resumo['Usados']
-        st.dataframe(resumo)
-        
-        # Gráfico de sobreposição
-        st.subheader(t("sobreposicao_ferias"))
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        for _, row in dados.iterrows():
-            ax.barh(
-                y=row['nome'],
-                width=(row['data_fim'] - row['data_inicio']).days,
-                left=row['data_inicio'],
-                alpha=0.6
-            )
-        
-        ax.xaxis.set_major_locator(mdates.MonthLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(fig)
-    else:
-        st.info(t("nenhuma_ferias_registrada"))
+        if not dados.empty:
+            # Processamento dos dados
+            dados['nome'] = dados['funcionarios'].apply(lambda x: x['nome'] if isinstance(x, dict) else '')
+            dados['dias_base'] = dados['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
+            
+            # Relatório de Utilização
+            st.subheader("Utilização de Férias")
+            resumo = dados.groupby(['nome', 'ano']).agg(
+                Utilizados=('dias', 'sum'),
+                Base=('dias_base', 'first')
+            ).reset_index()
+            resumo['Disponíveis'] = resumo['Base'] - resumo['Utilizados']
+            st.dataframe(resumo)
+            
+            # Gráfico de Ocupação
+            st.subheader("Ocupação por Período")
+            fig, ax = plt.subplots(figsize=(12, 6))
+            
+            for _, row in dados.iterrows():
+                ax.barh(
+                    y=row['nome'],
+                    width=(pd.to_datetime(row['data_fim']) - pd.to_datetime(row['data_inicio'])).days,
+                    left=pd.to_datetime(row['data_inicio']),
+                    alpha=0.6
+                )
+            
+            ax.xaxis.set_major_locator(mdates.MonthLocator())
+            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+            plt.xticks(rotation=45)
+            st.pyplot(fig)
+        else:
+            st.info("Nenhum dado disponível para relatórios")
+    except Exception as e:
+        st.error(f"Erro ao gerar relatórios: {str(e)}")
 
-# --- Sistema de Atualização Contínua ---
+# --- Sistema de Atualização Automática ---
 update_placeholder = st.empty()
 
+if 'last_update' not in st.session_state:
+    st.session_state.last_update = state.get_last_update()
+
 while True:
-    check_for_updates()
-    time.sleep(5)  # Verifica a cada 5 segundos
-    update_placeholder.empty()  # Limpa qualquer mensagem de atualização
+    try:
+        current_update = state.get_last_update()
+        
+        if current_update and st.session_state.last_update:
+            if current_update > st.session_state.last_update:
+                st.session_state.last_update = current_update
+                update_placeholder.success("Atualizando dados...")
+                time.sleep(1)
+                st.rerun()
+        
+        time.sleep(5)
+        update_placeholder.empty()
+    except Exception as e:
+        st.error(f"Erro no sistema de atualização: {str(e)}")
+        time.sleep(10)
