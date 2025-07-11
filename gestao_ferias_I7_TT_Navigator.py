@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from datetime import datetime
+from datetime import datetime, timedelta
 from supabase import create_client, Client
 import bcrypt
 import os
 import toml
+import time
 
 # --- Carregar traduções ---
 with open("traducao.toml", "r", encoding="utf-8") as f:
@@ -35,6 +36,34 @@ PASSWORD_HASH = os.getenv('PASSWORD_HASH', '')
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# --- Funções de controle de atualização ---
+def setup_update_tracking():
+    """Configura a tabela de controle de atualizações se não existir"""
+    try:
+        supabase.table("ultima_atualizacao").insert({"id": 1, "timestamp": datetime.now().isoformat()}).execute()
+    except Exception as e:
+        pass  # Tabela já existe
+
+def marcar_atualizacao():
+    """Marca que houve uma atualização no banco de dados"""
+    supabase.table("ultima_atualizacao").update({"timestamp": datetime.now().isoformat()}).eq("id", 1).execute()
+
+def verificar_atualizacoes():
+    """Verifica se houve atualizações no banco de dados"""
+    if 'ultima_atualizacao' not in st.session_state:
+        res = supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).single().execute()
+        st.session_state.ultima_atualizacao = res.data['timestamp']
+    
+    res = supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).single().execute()
+    nova_atualizacao = res.data['timestamp']
+    
+    if nova_atualizacao > st.session_state.ultima_atualizacao:
+        st.session_state.ultima_atualizacao = nova_atualizacao
+        st.rerun()
+
+# Configurar o controle de atualizações
+setup_update_tracking()
 
 # --- Autenticação ---
 def check_password():
@@ -71,6 +100,7 @@ with st.sidebar:
     novo_max = st.number_input(t("max_ferias_simultaneas"), min_value=1, value=max_atual)
     if novo_max != max_atual:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
+        marcar_atualizacao()  # Marcar que houve atualização
         st.success(t("config_atualizada"))
 
 # Funções auxiliares
@@ -171,6 +201,7 @@ with tab1:
                 "data_admissao": data_admissao.isoformat(),
                 "dias_ferias": dias_ferias
             }).execute()
+            marcar_atualizacao()  # Marcar que houve atualização
             st.success(t("funcionario_adicionado"))
             st.rerun()
 
@@ -191,11 +222,13 @@ with tab1:
                                 "data_admissao": nova_data.isoformat(),
                                 "dias_ferias": novos_dias
                             }).eq("id", row['id']).execute()
+                            marcar_atualizacao()  # Marcar que houve atualização
                             st.success(t("atualizado"))
                             st.rerun()
                     with col2:
                         if st.form_submit_button(t("apagar")):
                             supabase.table("funcionarios").delete().eq("id", row['id']).execute()
+                            marcar_atualizacao()  # Marcar que houve atualização
                             st.warning(t("removido"))
                             st.rerun()
 
@@ -263,6 +296,7 @@ with tab2:
                                         "dias": dias,
                                         "ano": ano_ferias
                                     }).execute()
+                                    marcar_atualizacao()  # Marcar que houve atualização
                                     st.success(t("ferias_marcadas"))
                                     st.rerun()
 
@@ -299,11 +333,13 @@ with tab2:
                                                     "data_fim": novo_fim.isoformat(),
                                                     "dias": dias
                                                 }).eq("id", row['id']).execute()
+                                                marcar_atualizacao()  # Marcar que houve atualização
                                                 st.success(t("ferias_atualizadas"))
                                                 st.rerun()
                         with col2:
                             if st.form_submit_button(t("apagar")):
                                 supabase.table("ferias").delete().eq("id", row['id']).execute()
+                                marcar_atualizacao()  # Marcar que houve atualização
                                 st.warning(t("ferias_removidas"))
                                 st.rerun()
 
@@ -432,3 +468,7 @@ with st.sidebar:
             Powered by NN ®
         </div>
     """, unsafe_allow_html=True)
+
+# Verificar atualizações periodicamente
+verificar_atualizacoes()
+time.sleep(5)  # Verifica a cada 5 segundos
