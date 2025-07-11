@@ -22,8 +22,6 @@ def t(chave):
 
 
 
-supabase = init_supabase()
-
 # --- Autenticação ---
 def check_auth():
     if 'auth' not in st.session_state:
