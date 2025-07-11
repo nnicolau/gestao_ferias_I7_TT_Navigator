@@ -8,6 +8,7 @@ import bcrypt
 import os
 import toml
 import time
+from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 # --- Carregar traduções ---
 with open("traducao.toml", "r", encoding="utf-8") as f:
@@ -37,33 +38,44 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- Funções de controle de atualização ---
+# --- Sistema de Atualização em Tempo Real ---
 def setup_update_tracking():
-    """Configura a tabela de controle de atualizações se não existir"""
+    """Configura o sistema de rastreamento de atualizações"""
     try:
-        supabase.table("ultima_atualizacao").insert({"id": 1, "timestamp": datetime.now().isoformat()}).execute()
+        # Verifica se a tabela existe
+        supabase.table("ultima_atualizacao").select("*").limit(1).execute()
     except Exception as e:
-        pass  # Tabela já existe
+        st.error(f"Erro ao acessar tabela de atualização: {e}")
+        st.warning("Por favor, crie a tabela 'ultima_atualizacao' no Supabase com os campos: id (int PK), timestamp (timestamp)")
+        return False
+    return True
+
+def get_last_update():
+    """Obtém o último timestamp de atualização do banco de dados"""
+    try:
+        res = supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).execute()
+        if res.data:
+            return pd.to_datetime(res.data[0]['timestamp'])
+    except Exception as e:
+        st.error(f"Erro ao obter última atualização: {e}")
+    return None
 
 def marcar_atualizacao():
-    """Marca que houve uma atualização no banco de dados"""
-    supabase.table("ultima_atualizacao").update({"timestamp": datetime.now().isoformat()}).eq("id", 1).execute()
+    """Atualiza o timestamp no banco de dados"""
+    try:
+        supabase.table("ultima_atualizacao").upsert({
+            "id": 1,
+            "timestamp": datetime.now().isoformat()
+        }).execute()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao marcar atualização: {e}")
+        return False
 
-def verificar_atualizacoes():
-    """Verifica se houve atualizações no banco de dados"""
-    if 'ultima_atualizacao' not in st.session_state:
-        res = supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).single().execute()
-        st.session_state.ultima_atualizacao = res.data['timestamp']
-    
-    res = supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).single().execute()
-    nova_atualizacao = res.data['timestamp']
-    
-    if nova_atualizacao > st.session_state.ultima_atualizacao:
-        st.session_state.ultima_atualizacao = nova_atualizacao
-        st.rerun()
-
-# Configurar o controle de atualizações
-setup_update_tracking()
+# Inicializa o sistema de atualização
+if not setup_update_tracking():
+    st.error("Sistema de atualização em tempo real não está configurado corretamente.")
+    st.stop()
 
 # --- Autenticação ---
 def check_password():
@@ -74,6 +86,7 @@ def check_password():
     if password:
         if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
             st.session_state.authenticated = True
+            st.session_state.last_update = get_last_update()
             st.rerun()
         else:
             st.error(t("senha_incorreta"))
@@ -86,9 +99,9 @@ if not check_password():
 st.set_page_config(page_title=t("titulo"), layout="wide")
 col1, col2 = st.columns([1, 4])
 with col1:
-    st.image("logo2.png", width=400)  # Logo adicional à esquerda
+    st.image("logo2.png", width=400)
 with col2:
-    st.image("Logotipo.png", width=100)  # Logo principal
+    st.image("Logotipo.png", width=100)
 
 st.title(t("titulo"))
 
@@ -100,8 +113,10 @@ with st.sidebar:
     novo_max = st.number_input(t("max_ferias_simultaneas"), min_value=1, value=max_atual)
     if novo_max != max_atual:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
-        marcar_atualizacao()  # Marcar que houve atualização
+        marcar_atualizacao()
         st.success(t("config_atualizada"))
+        time.sleep(1)
+        st.rerun()
 
 # Funções auxiliares
 def calcular_dias_uteis(inicio, fim):
@@ -157,14 +172,28 @@ def verificar_duplicidade_ferias(nova_inicio, nova_fim, funcionario_id, ignorar_
 
     return True, None, None
 
-# --- Controle de Abas com Atualização de Dados ---
+# --- Controle de Atualização em Tempo Real ---
+def verificar_atualizacoes():
+    """Verifica se houve atualizações no banco de dados"""
+    try:
+        nova_atualizacao = get_last_update()
+        
+        if nova_atualizacao and st.session_state.get('last_update'):
+            if nova_atualizacao > st.session_state.last_update:
+                st.session_state.last_update = nova_atualizacao
+                st.rerun()
+        elif nova_atualizacao:  # Primeira execução
+            st.session_state.last_update = nova_atualizacao
+            
+    except Exception as e:
+        st.error(f"Erro ao verificar atualizações: {e}")
+
+# --- Controle de Abas ---
 if 'current_tab' not in st.session_state:
     st.session_state.current_tab = None
 
-# Definir abas
 tab1, tab2, tab3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
-# Determinar aba ativa
 current_tab = None
 if tab1:
     current_tab = "gestao_funcionarios"
@@ -173,7 +202,6 @@ elif tab2:
 elif tab3:
     current_tab = "relatorios_ferias"
 
-# Forçar atualização ao mudar de aba
 if st.session_state.current_tab != current_tab:
     st.session_state.current_tab = current_tab
     st.rerun()
@@ -182,7 +210,6 @@ if st.session_state.current_tab != current_tab:
 with tab1:
     st.subheader(t("gestao_funcionarios"))
     
-    # Busca direta ao banco de dados (sem cache)
     funcionarios = pd.DataFrame(
         supabase.table("funcionarios")
         .select("*")
@@ -201,9 +228,10 @@ with tab1:
                 "data_admissao": data_admissao.isoformat(),
                 "dias_ferias": dias_ferias
             }).execute()
-            marcar_atualizacao()  # Marcar que houve atualização
-            st.success(t("funcionario_adicionado"))
-            st.rerun()
+            if marcar_atualizacao():
+                st.success(t("funcionario_adicionado"))
+                time.sleep(1)
+                st.rerun()
 
     if not funcionarios.empty:
         st.dataframe(funcionarios[['id', 'nome', 'data_admissao', 'dias_ferias']])
@@ -222,21 +250,22 @@ with tab1:
                                 "data_admissao": nova_data.isoformat(),
                                 "dias_ferias": novos_dias
                             }).eq("id", row['id']).execute()
-                            marcar_atualizacao()  # Marcar que houve atualização
-                            st.success(t("atualizado"))
-                            st.rerun()
+                            if marcar_atualizacao():
+                                st.success(t("atualizado"))
+                                time.sleep(1)
+                                st.rerun()
                     with col2:
                         if st.form_submit_button(t("apagar")):
                             supabase.table("funcionarios").delete().eq("id", row['id']).execute()
-                            marcar_atualizacao()  # Marcar que houve atualização
-                            st.warning(t("removido"))
-                            st.rerun()
+                            if marcar_atualizacao():
+                                st.warning(t("removido"))
+                                time.sleep(1)
+                                st.rerun()
 
 # --- Aba 2: Gestão de Férias ---
 with tab2:
     st.subheader(t("gestao_ferias"))
     
-    # Busca direta ao banco de dados (sem cache)
     funcionarios_ferias = pd.DataFrame(
         supabase.table("funcionarios")
         .select("id", "nome", "dias_ferias")
@@ -296,9 +325,10 @@ with tab2:
                                         "dias": dias,
                                         "ano": ano_ferias
                                     }).execute()
-                                    marcar_atualizacao()  # Marcar que houve atualização
-                                    st.success(t("ferias_marcadas"))
-                                    st.rerun()
+                                    if marcar_atualizacao():
+                                        st.success(t("ferias_marcadas"))
+                                        time.sleep(1)
+                                        st.rerun()
 
         if not ferias.empty:
             ferias['nome'] = ferias['funcionarios'].apply(lambda f: f['nome'] if isinstance(f, dict) else '')
@@ -333,21 +363,22 @@ with tab2:
                                                     "data_fim": novo_fim.isoformat(),
                                                     "dias": dias
                                                 }).eq("id", row['id']).execute()
-                                                marcar_atualizacao()  # Marcar que houve atualização
-                                                st.success(t("ferias_atualizadas"))
-                                                st.rerun()
+                                                if marcar_atualizacao():
+                                                    st.success(t("ferias_atualizadas"))
+                                                    time.sleep(1)
+                                                    st.rerun()
                         with col2:
                             if st.form_submit_button(t("apagar")):
                                 supabase.table("ferias").delete().eq("id", row['id']).execute()
-                                marcar_atualizacao()  # Marcar que houve atualização
-                                st.warning(t("ferias_removidas"))
-                                st.rerun()
+                                if marcar_atualizacao():
+                                    st.warning(t("ferias_removidas"))
+                                    time.sleep(1)
+                                    st.rerun()
 
 # --- Aba 3: Relatórios de Férias ---
 with tab3:
     st.subheader(t("relatorios_ferias"))
     
-    # Busca direta ao banco de dados (sem cache)
     dados_ferias = pd.DataFrame(
         supabase.table("ferias")
         .select("*", "funcionarios(id, nome, dias_ferias)")
@@ -469,6 +500,22 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
-# Verificar atualizações periodicamente
-verificar_atualizacoes()
-time.sleep(5)  # Verifica a cada 5 segundos
+# --- Sistema de Atualização Contínua ---
+update_placeholder = st.empty()
+
+if 'last_update' not in st.session_state:
+    st.session_state.last_update = get_last_update()
+
+# Verifica atualizações periodicamente
+while True:
+    nova_atualizacao = get_last_update()
+    
+    if nova_atualizacao and st.session_state.last_update:
+        if nova_atualizacao > st.session_state.last_update:
+            st.session_state.last_update = nova_atualizacao
+            update_placeholder.success("Atualizando dados...")
+            time.sleep(1)
+            st.rerun()
+    
+    time.sleep(5)  # Verifica a cada 5 segundos
+    update_placeholder.empty()
