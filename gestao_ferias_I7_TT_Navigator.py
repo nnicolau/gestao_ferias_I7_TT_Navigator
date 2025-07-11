@@ -20,7 +20,16 @@ def t(chave):
     lang = st.session_state.get("lang", "pt")
     return traducoes.get(lang, {}).get(chave, chave)
 
+# --- Conexão com o Supabase ---
+@st.cache_resource
+def init_supabase():
+    try:
+        return create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    except Exception as e:
+        st.error(f"Erro ao conectar ao banco de dados: {str(e)}")
+        st.stop()
 
+supabase = init_supabase()
 
 # --- Autenticação ---
 def check_auth():
@@ -92,7 +101,6 @@ def calcular_dias_uteis(inicio, fim):
 
 def verificar_disponibilidade(inicio, fim, funcionario_id):
     try:
-        # Verifica conflitos com outros funcionários
         res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).execute()
         limite = res.data[0]['max_ferias_simultaneas']
         
@@ -180,7 +188,6 @@ with tab2:
     st.subheader(t("ferias"))
     
     try:
-        # Seleção de Funcionário
         funcionarios = pd.DataFrame(supabase.table("funcionarios").select("id", "nome").execute().data)
         ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome)").execute().data)
         
@@ -262,11 +269,9 @@ with tab3:
     st.subheader(t("relatorios"))
     
     try:
-        # Dados para relatórios
         dados = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome, dias_ferias)").execute().data)
         
         if not dados.empty:
-            # Processamento dos dados
             dados['nome'] = dados['funcionarios'].apply(lambda x: x['nome'] if isinstance(x, dict) else '')
             dados['dias_base'] = dados['funcionarios'].apply(lambda x: x.get('dias_ferias', 0) if isinstance(x, dict) else 0)
             
