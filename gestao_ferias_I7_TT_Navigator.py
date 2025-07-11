@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 from supabase import create_client, Client
-from supabase.lib.realtime_client import RealtimeClient
 import bcrypt
 import os
 import toml
@@ -27,16 +26,32 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- Sistema Realtime ---
-realtime = RealtimeClient(SUPABASE_URL, params={"apikey": SUPABASE_KEY})
-channel = realtime.channel("schema-db-changes")
+# --- Sistema de Atualização em Tempo Real Alternativo ---
+class StateManager:
+    def __init__(self, supabase_client):
+        self.supabase = supabase_client
+        self.last_update = None
+    
+    def get_last_update(self):
+        try:
+            res = self.supabase.table("ultima_atualizacao").select("timestamp").eq("id", 1).execute()
+            return pd.to_datetime(res.data[0]['timestamp']) if res.data else None
+        except Exception as e:
+            st.error(f"Erro ao obter última atualização: {str(e)}")
+            return None
+    
+    def mark_update(self):
+        try:
+            self.supabase.table("ultima_atualizacao").upsert({
+                "id": 1,
+                "timestamp": datetime.now().isoformat()
+            }).execute()
+            return True
+        except Exception as e:
+            st.error(f"Erro ao marcar atualização: {str(e)}")
+            return False
 
-def handle_change(payload):
-    if payload.get('event') == 'UPDATE' or payload.get('event') == 'INSERT' or payload.get('event') == 'DELETE':
-        st.rerun()
-
-channel.on("POSTGRES_CHANGES", handle_change)
-channel.subscribe()
+state_manager = StateManager(supabase)
 
 # --- Autenticação ---
 def check_password():
@@ -49,6 +64,7 @@ def check_password():
     password = st.text_input(t("senha_acesso"), type="password", key="pw_input")
     if password and bcrypt.checkpw(password.encode(), os.getenv('PASSWORD_HASH').encode()):
         st.session_state.authenticated = True
+        st.session_state.last_update = state_manager.get_last_update()
         st.rerun()
     elif password:
         st.error(t("senha_incorreta"))
@@ -83,9 +99,10 @@ with st.sidebar:
     
     if novo_max != max_atual:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
-        st.success(t("config_atualizada"))
-        time.sleep(1)
-        st.rerun()
+        if state_manager.mark_update():
+            st.success(t("config_atualizada"))
+            time.sleep(1)
+            st.rerun()
 
 # --- Funções Auxiliares ---
 def calcular_dias_uteis(inicio, fim):
@@ -117,6 +134,20 @@ def verificar_limite_ferias(inicio, fim, funcionario_id):
     conflito = calendario[calendario >= max_simultaneas]
     return (True, None) if conflito.empty else (False, conflito.index[0].strftime('%d/%m/%Y'))
 
+# --- Verificação de Atualizações ---
+def check_for_updates():
+    if 'last_update' not in st.session_state:
+        st.session_state.last_update = state_manager.get_last_update()
+    
+    current_update = state_manager.get_last_update()
+    
+    if current_update and st.session_state.last_update:
+        if current_update > st.session_state.last_update:
+            st.session_state.last_update = current_update
+            st.rerun()
+    elif current_update:
+        st.session_state.last_update = current_update
+
 # --- Abas Principais ---
 tab1, tab2, tab3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
 
@@ -136,9 +167,10 @@ with tab1:
                 "data_admissao": data_admissao.isoformat(),
                 "dias_ferias": dias_ferias
             }).execute()
-            st.success(t("funcionario_adicionado"))
-            time.sleep(1)
-            st.rerun()
+            if state_manager.mark_update():
+                st.success(t("funcionario_adicionado"))
+                time.sleep(1)
+                st.rerun()
     
     # Lista de funcionários
     funcionarios = pd.DataFrame(
@@ -165,15 +197,17 @@ with tab1:
                                 "data_admissao": nova_data.isoformat(),
                                 "dias_ferias": novos_dias
                             }).eq("id", func['id']).execute()
-                            st.success(t("atualizado"))
-                            time.sleep(1)
-                            st.rerun()
+                            if state_manager.mark_update():
+                                st.success(t("atualizado"))
+                                time.sleep(1)
+                                st.rerun()
                     with col2:
                         if st.form_submit_button(t("remover")):
                             supabase.table("funcionarios").delete().eq("id", func['id']).execute()
-                            st.success(t("removido"))
-                            time.sleep(1)
-                            st.rerun()
+                            if state_manager.mark_update():
+                                st.success(t("removido"))
+                                time.sleep(1)
+                                st.rerun()
 
 # Aba 2: Gestão de Férias
 with tab2:
@@ -220,9 +254,10 @@ with tab2:
                             "dias": dias,
                             "ano": ano_ferias
                         }).execute()
-                        st.success(t("ferias_marcadas"))
-                        time.sleep(1)
-                        st.rerun()
+                        if state_manager.mark_update():
+                            st.success(t("ferias_marcadas"))
+                            time.sleep(1)
+                            st.rerun()
     
     # Lista de férias
     if not ferias.empty:
@@ -249,15 +284,17 @@ with tab2:
                                     "data_fim": novo_fim.isoformat(),
                                     "dias": dias
                                 }).eq("id", fer['id']).execute()
-                                st.success(t("ferias_atualizadas"))
-                                time.sleep(1)
-                                st.rerun()
+                                if state_manager.mark_update():
+                                    st.success(t("ferias_atualizadas"))
+                                    time.sleep(1)
+                                    st.rerun()
                     with col2:
                         if st.form_submit_button(t("remover")):
                             supabase.table("ferias").delete().eq("id", fer['id']).execute()
-                            st.success(t("ferias_removidas"))
-                            time.sleep(1)
-                            st.rerun()
+                            if state_manager.mark_update():
+                                st.success(t("ferias_removidas"))
+                                time.sleep(1)
+                                st.rerun()
 
 # Aba 3: Relatórios de Férias
 with tab3:
@@ -313,7 +350,10 @@ with tab3:
     else:
         st.info(t("nenhuma_ferias_registrada"))
 
-# Rodapé
-with st.sidebar:
-    st.markdown("---")
-    st.markdown(f"<div style='text-align: center; font-size: small;'>v1.0 • {datetime.now().year}</div>", unsafe_allow_html=True)
+# --- Sistema de Atualização Contínua ---
+update_placeholder = st.empty()
+
+while True:
+    check_for_updates()
+    time.sleep(5)  # Verifica a cada 5 segundos
+    update_placeholder.empty()  # Limpa qualquer mensagem de atualização
