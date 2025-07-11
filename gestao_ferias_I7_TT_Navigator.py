@@ -20,36 +20,7 @@ def t(chave):
     lang = st.session_state.get("lang", "pt")
     return traducoes.get(lang, {}).get(chave, chave)
 
-# --- Conexão com o Supabase ---
-@st.cache_resource
-def init_supabase():
-    try:
-        supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
-        
-        # Cria tabelas se não existirem
-        supabase.rpc('sql', {'query': """
-            CREATE TABLE IF NOT EXISTS configuracoes (
-                id INT PRIMARY KEY DEFAULT 1,
-                max_ferias_simultaneas INT NOT NULL DEFAULT 3
-            );
-            
-            INSERT INTO configuracoes (id, max_ferias_simultaneas) 
-            VALUES (1, 3)
-            ON CONFLICT (id) DO NOTHING;
-            
-            CREATE TABLE IF NOT EXISTS ultima_atualizacao (
-                id INT PRIMARY KEY DEFAULT 1,
-                timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-            
-            INSERT INTO ultima_atualizacao (id) VALUES (1)
-            ON CONFLICT (id) DO NOTHING;
-        """}).execute()
-        
-        return supabase
-    except Exception as e:
-        st.error(f"Erro ao conectar ao banco de dados: {str(e)}")
-        st.stop()
+
 
 supabase = init_supabase()
 
