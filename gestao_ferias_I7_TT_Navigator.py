@@ -86,15 +86,18 @@ with st.sidebar:
         supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
         st.success(t("config_atualizada"))
 
-# --- Tabs com atualização ---
-tabs = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
-tab_labels = ["gestao_funcionarios", "gestao_ferias", "relatorios_ferias"]
+# --- Navegação por Abas (manual com selectbox) ---
+tab_labels = {
+    "gestao_funcionarios": t("gestao_funcionarios"),
+    "gestao_ferias": t("gestao_ferias"),
+    "relatorios_ferias": t("relatorios_ferias")
+}
 
-for i, tab in enumerate(tabs):
-    if st.session_state.get("selected_tab") != tab_labels[i]:
-        st.session_state.selected_tab = tab_labels[i]
-        st.experimental_rerun()
-    break
+selected_tab_key = st.sidebar.radio("📑 Navegação", list(tab_labels.keys()), format_func=lambda x: tab_labels[x], key="selected_tab")
+
+# Atualiza automaticamente ao trocar de aba
+st.cache_data.clear()
+st.rerun()
 
 # --- Funções auxiliares ---
 @st.cache_data(ttl=10)
@@ -105,7 +108,7 @@ def calcular_dias_uteis(inicio, fim):
     return len(pd.bdate_range(start=inicio, end=fim))
 
 # --- Aba 1: Gestão de Funcionários ---
-with tabs[0]:
+if selected_tab_key == "gestao_funcionarios":
     st.subheader(t("gestao_funcionarios"))
     funcionarios = obter_funcionarios()
 
@@ -127,7 +130,7 @@ with tabs[0]:
         st.dataframe(funcionarios[['id', 'nome', 'data_admissao', 'dias_ferias']])
 
 # --- Aba 2: Gestão de Férias ---
-with tabs[1]:
+elif selected_tab_key == "gestao_ferias":
     st.subheader(t("gestao_ferias"))
     funcionarios = obter_funcionarios()
 
@@ -168,7 +171,7 @@ with tabs[1]:
         st.dataframe(ferias[['nome', 'data_inicio', 'data_fim', 'dias']])
 
 # --- Aba 3: Relatórios de Férias ---
-with tabs[2]:
+elif selected_tab_key == "relatorios_ferias":
     st.subheader(t("relatorios_ferias"))
     dados_ferias = pd.DataFrame(
         supabase.table("ferias").select("*", "funcionarios(id, nome, dias_ferias)").execute().data
