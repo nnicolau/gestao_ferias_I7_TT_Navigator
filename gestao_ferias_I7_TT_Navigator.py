@@ -19,8 +19,8 @@ def t(chave):
 # --- Seleção de idioma ---
 if "lang" not in st.session_state:
     st.session_state.lang = "pt"
-
-st.sidebar.selectbox("🌐 Língua / Language", ["pt", "en"], index=0 if st.session_state.lang == "pt" else 1, key="lang")
+st.sidebar.selectbox("🌐 Língua / Language", ["pt", "en"],
+                    index=0 if st.session_state.lang == "pt" else 1, key="lang")
 
 # --- Variáveis ambiente ---
 try:
@@ -43,7 +43,9 @@ def check_password():
     if password:
         if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
             st.session_state.authenticated = True
-            st.rerun()
+            # Não usar st.rerun(), só atualiza a flag
+            st.experimental_set_query_params(authenticated="true")
+            return True
         else:
             st.error(t("senha_incorreta"))
     return False
@@ -51,19 +53,73 @@ def check_password():
 if not check_password():
     st.stop()
 
+# --- Controle das abas ---
+if "aba_atual" not in st.session_state:
+    st.session_state.aba_atual = "funcionarios"
+
+tabs = {
+    "funcionarios": t("gestao_funcionarios"),
+    "ferias": t("gestao_ferias"),
+    "relatorios": t("relatorios_ferias")
+}
+
+aba_selecionada = st.tabs(list(tabs.values()))
+
+# Determinar aba atual pelo índice da aba selecionada
+idx_aba = [v for v in tabs.values()].index(aba_selecionada)
+nome_aba = list(tabs.keys())[idx_aba]
+st.session_state.aba_atual = nome_aba
+
+# --- Flags para recarregar dados ---
+if "reload_funcionarios" not in st.session_state:
+    st.session_state.reload_funcionarios = True
+if "reload_ferias" not in st.session_state:
+    st.session_state.reload_ferias = True
+if "reload_config" not in st.session_state:
+    st.session_state.reload_config = True
+
+# --- Funções para carregar dados ---
+def carregar_funcionarios():
+    return pd.DataFrame(supabase.table("funcionarios").select("*").order("id").execute().data)
+
+def carregar_ferias():
+    return pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data)
+
+def carregar_config():
+    res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
+    return res.data['max_ferias_simultaneas'] if res.data else 5
+
 # --- Página ---
 st.set_page_config(page_title=t("titulo"), layout="wide")
 st.title(t("titulo"))
 
-# --- Abas ---
-tab1, tab2, tab3 = st.tabs([t("gestao_funcionarios"), t("gestao_ferias"), t("relatorios_ferias")])
+# --- Sidebar: configurações ---
+with st.sidebar:
+    st.header(t("configuracoes"))
+    if st.session_state.reload_config:
+        max_ferias = carregar_config()
+        st.session_state.max_ferias_simultaneas = max_ferias
+        st.session_state.reload_config = False
 
-# --- Aba 1: Gestão de Funcionários ---
-with tab1:
+    novo_max = st.number_input(t("max_ferias_simultaneas"), min_value=1, value=st.session_state.max_ferias_simultaneas)
+    if novo_max != st.session_state.max_ferias_simultaneas:
+        supabase.table("configuracoes").update({"max_ferias_simultaneas": novo_max}).eq("id", 1).execute()
+        st.success(t("config_atualizada"))
+        st.session_state.max_ferias_simultaneas = novo_max
+        st.session_state.reload_config = True
+        # Atualizar abas para refletir alteração se necessário
+
+# --- Aba Funcionários ---
+if st.session_state.aba_atual == "funcionarios":
     st.subheader(t("gestao_funcionarios"))
-    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("*").order("id").execute().data)
 
-    with st.form("adicionar_funcionario", clear_on_submit=True):
+    if st.session_state.reload_funcionarios:
+        st.session_state.funcionarios = carregar_funcionarios()
+        st.session_state.reload_funcionarios = False
+
+    funcionarios = st.session_state.funcionarios
+
+    with st.form("form_adicionar_funcionario", clear_on_submit=True):
         nome = st.text_input(t("nome"))
         data_admissao = st.date_input(t("data_admissao"))
         dias_ferias = st.number_input(t("dias_ferias_ano"), min_value=1, value=22)
@@ -74,13 +130,13 @@ with tab1:
                 "dias_ferias": dias_ferias
             }).execute()
             st.success(t("funcionario_adicionado"))
-            st.experimental_rerun()
+            st.session_state.reload_funcionarios = True
 
     st.dataframe(funcionarios)
 
     for _, row in funcionarios.iterrows():
         with st.expander(f"{row['nome']}"):
-            with st.form(f"editar_{row['id']}"):
+            with st.form(f"form_editar_{row['id']}"):
                 novo_nome = st.text_input(t("nome"), value=row['nome'])
                 nova_data = st.date_input(t("data_admissao"), value=pd.to_datetime(row['data_admissao']))
                 novos_dias = st.number_input(t("dias_ferias_ano"), min_value=1, value=row['dias_ferias'])
@@ -93,21 +149,29 @@ with tab1:
                             "dias_ferias": novos_dias
                         }).eq("id", row['id']).execute()
                         st.success(t("atualizado"))
-                        st.experimental_rerun()
+                        st.session_state.reload_funcionarios = True
                 with col2:
                     if st.form_submit_button(t("apagar")):
                         supabase.table("funcionarios").delete().eq("id", row['id']).execute()
                         st.warning(t("removido"))
-                        st.experimental_rerun()
+                        st.session_state.reload_funcionarios = True
 
-# --- Aba 2: Gestão de Férias ---
-with tab2:
+# --- Aba Férias ---
+elif st.session_state.aba_atual == "ferias":
     st.subheader(t("gestao_ferias"))
-    funcionarios_ferias = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
-    ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data)
+
+    if st.session_state.reload_funcionarios:
+        st.session_state.funcionarios = carregar_funcionarios()
+        st.session_state.reload_funcionarios = False
+    funcionarios_ferias = st.session_state.funcionarios
+
+    if st.session_state.reload_ferias:
+        st.session_state.ferias = carregar_ferias()
+        st.session_state.reload_ferias = False
+    ferias = st.session_state.ferias
 
     if not funcionarios_ferias.empty:
-        with st.form("marcar_ferias", clear_on_submit=True):
+        with st.form("form_marcar_ferias", clear_on_submit=True):
             funcionario_id = st.selectbox(
                 t("nome"),
                 funcionarios_ferias['id'],
@@ -122,13 +186,13 @@ with tab2:
                     "data_fim": data_fim.isoformat()
                 }).execute()
                 st.success(t("ferias_marcadas"))
-                st.experimental_rerun()
+                st.session_state.reload_ferias = True
 
     st.dataframe(ferias)
 
     for _, row in ferias.iterrows():
         with st.expander(f"{row['funcionarios']['nome']} {row['data_inicio']} - {row['data_fim']}"):
-            with st.form(f"editar_ferias_{row['id']}"):
+            with st.form(f"form_editar_ferias_{row['id']}"):
                 novo_inicio = st.date_input(t("inicio"), value=pd.to_datetime(row['data_inicio']))
                 novo_fim = st.date_input(t("fim"), value=pd.to_datetime(row['data_fim']))
                 col1, col2 = st.columns(2)
@@ -139,38 +203,43 @@ with tab2:
                             "data_fim": novo_fim.isoformat()
                         }).eq("id", row['id']).execute()
                         st.success(t("ferias_atualizadas"))
-                        st.experimental_rerun()
+                        st.session_state.reload_ferias = True
                 with col2:
                     if st.form_submit_button(t("apagar")):
                         supabase.table("ferias").delete().eq("id", row['id']).execute()
                         st.warning(t("ferias_removidas"))
-                        st.experimental_rerun()
+                        st.session_state.reload_ferias = True
 
-# --- Aba 3: Relatórios ---
-with tab3:
+# --- Aba Relatórios ---
+elif st.session_state.aba_atual == "relatorios":
     st.subheader(t("relatorios_ferias"))
-    dados_ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(id, nome)").execute().data)
 
-    if not dados_ferias.empty:
-        dados_ferias['data_inicio'] = pd.to_datetime(dados_ferias['data_inicio'])
-        dados_ferias['data_fim'] = pd.to_datetime(dados_ferias['data_fim'])
-        dados_ferias['funcionario'] = dados_ferias['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
+    if st.session_state.reload_ferias:
+        st.session_state.ferias = carregar_ferias()
+        st.session_state.reload_ferias = False
+    ferias = st.session_state.ferias
+
+    if not ferias.empty:
+        ferias['data_inicio'] = pd.to_datetime(ferias['data_inicio'])
+        ferias['data_fim'] = pd.to_datetime(ferias['data_fim'])
+        ferias['funcionario'] = ferias['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
 
         st.subheader(t("ferias_marcadas_titulo"))
-        st.dataframe(dados_ferias[['funcionario', 'data_inicio', 'data_fim']])
+        st.dataframe(ferias[['funcionario', 'data_inicio', 'data_fim']])
 
         fig, ax = plt.subplots(figsize=(14, 6))
-        all_dates = pd.date_range(start=dados_ferias['data_inicio'].min(), end=dados_ferias['data_fim'].max())
+        all_dates = pd.date_range(start=ferias['data_inicio'].min(), end=ferias['data_fim'].max())
         congestion = pd.Series(0, index=all_dates)
-        for _, row in dados_ferias.iterrows():
+        for _, row in ferias.iterrows():
             inicio = pd.to_datetime(row['data_inicio'])
             fim = pd.to_datetime(row['data_fim'])
             mask = (all_dates >= inicio) & (all_dates <= fim)
             congestion[mask] += 1
-        ax.plot(congestion.index, congestion.values, label="Sobreposição", color='red')
-        ax.set_title("Gráfico de Sobreposição de Férias")
-        ax.set_xlabel("Data")
-        ax.set_ylabel("Número de Funcionários de Férias")
+
+        ax.plot(congestion.index, congestion.values, label=t("sobreposicao"), color='red')
+        ax.set_title(t("titulo_grafico"))
+        ax.set_xlabel(t("data"))
+        ax.set_ylabel(t("numero_funcionarios_ferias"))
         ax.legend()
         ax.grid()
         st.pyplot(fig)
