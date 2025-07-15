@@ -162,15 +162,17 @@ with tab3:
         fig, ax = plt.subplots(figsize=(14, 6))
         all_dates = pd.date_range(start=dados_ferias['data_inicio'].min(), end=dados_ferias['data_fim'].max())
         congestion = pd.Series(0, index=all_dates)
+
         for _, row in dados_ferias.iterrows():
-            inicio = pd.to_datetime(row['data_inicio'])
-            fim = pd.to_datetime(row['data_fim'])
-            mask = (all_dates >= inicio) & (all_dates <= fim)
-            congestion[mask] += 1
-        ax.plot(congestion.index, congestion.values, label="Sobreposição", color='red')
-        ax.set_title("Gráfico de Sobreposição de Férias")
-        ax.set_xlabel("Data")
-        ax.set_ylabel("Número de Funcionários de Férias")
+        inicio = pd.to_datetime(row['data_inicio'])
+        fim = pd.to_datetime(row['data_fim'])
+        mask = (all_dates >= inicio) & (all_dates <= fim)
+        congestion[mask] += 1
+
+        ax.plot(congestion.index, congestion.values, label=\"Sobreposição\", color='red')
+        ax.set_title(\"Gráfico de Sobreposição de Férias\")
+        ax.set_xlabel(\"Data\")
+        ax.set_ylabel(\"Número de Funcionários de Férias\")
         ax.legend()
         ax.grid()
         st.pyplot(fig)
