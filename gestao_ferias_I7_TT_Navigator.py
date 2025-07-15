@@ -163,7 +163,9 @@ with tab3:
         all_dates = pd.date_range(start=dados_ferias['data_inicio'].min(), end=dados_ferias['data_fim'].max())
         congestion = pd.Series(0, index=all_dates)
         for _, row in dados_ferias.iterrows():
-            mask = (all_dates >= row['data_inicio']) & (all_dates <= row['data_fim'])
+            inicio = pd.to_datetime(row['data_inicio'])
+            fim = pd.to_datetime(row['data_fim'])
+            mask = (all_dates >= inicio) & (all_dates <= fim)
             congestion[mask] += 1
         ax.plot(congestion.index, congestion.values, label="Sobreposição", color='red')
         ax.set_title("Gráfico de Sobreposição de Férias")
