@@ -169,7 +169,7 @@ with tab3:
             mask = (all_dates >= inicio) & (all_dates <= fim)
             congestion[mask] += 1
 
-        ax.plot(congestion.index, congestion.values, label=\"Sobreposição\", color='red')
+        ax.plot(congestion.index, congestion.values, label="Sobreposição", color='red')
         ax.set_title(\"Gráfico de Sobreposição de Férias\")
         ax.set_xlabel(\"Data\")
         ax.set_ylabel(\"Número de Funcionários de Férias\")
