@@ -170,9 +170,9 @@ with tab3:
             congestion[mask] += 1
 
         ax.plot(congestion.index, congestion.values, label="Sobreposição", color='red')
-        ax.set_title(\"Gráfico de Sobreposição de Férias\")
-        ax.set_xlabel(\"Data\")
-        ax.set_ylabel(\"Número de Funcionários de Férias\")
+        ax.set_title("Gráfico de Sobreposição de Férias")
+        ax.set_xlabel("Data")
+        ax.set_ylabel("Número de Funcionários de Férias")
         ax.legend()
         ax.grid()
         st.pyplot(fig)
