@@ -152,8 +152,8 @@ with tab3:
     dados_ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(id, nome)").execute().data)
 
     if not dados_ferias.empty:
-        dados_ferias['data_inicio'] = pd.to_datetime(dados_ferias['data_inicio']).dt.date
-        dados_ferias['data_fim'] = pd.to_datetime(dados_ferias['data_fim']).dt.date
+        dados_ferias['data_inicio'] = pd.to_datetime(dados_ferias['data_inicio'])
+        dados_ferias['data_fim'] = pd.to_datetime(dados_ferias['data_fim'])
         dados_ferias['funcionario'] = dados_ferias['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
 
         st.subheader(t("ferias_marcadas_titulo"))
@@ -162,13 +162,11 @@ with tab3:
         fig, ax = plt.subplots(figsize=(14, 6))
         all_dates = pd.date_range(start=dados_ferias['data_inicio'].min(), end=dados_ferias['data_fim'].max())
         congestion = pd.Series(0, index=all_dates)
-
         for _, row in dados_ferias.iterrows():
             inicio = pd.to_datetime(row['data_inicio'])
             fim = pd.to_datetime(row['data_fim'])
             mask = (all_dates >= inicio) & (all_dates <= fim)
             congestion[mask] += 1
-
         ax.plot(congestion.index, congestion.values, label="Sobreposição", color='red')
         ax.set_title("Gráfico de Sobreposição de Férias")
         ax.set_xlabel("Data")
