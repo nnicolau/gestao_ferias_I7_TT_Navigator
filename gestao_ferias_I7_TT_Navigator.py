@@ -43,8 +43,6 @@ def check_password():
     if password:
         if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
             st.session_state.authenticated = True
-            # Não usar st.rerun(), só atualiza a flag
-            st.experimental_set_query_params(authenticated="true")
             return True
         else:
             st.error(t("senha_incorreta"))
@@ -63,7 +61,14 @@ tabs = {
     "relatorios": t("relatorios_ferias")
 }
 
-aba_selecionada = st.tabs(list(tabs.values()))
+abas = st.tabs(list(tabs.values()))
+
+if abas[0]:
+    st.session_state.aba_atual = "funcionarios"
+elif abas[1]:
+    st.session_state.aba_atual = "ferias"
+elif abas[2]:
+    st.session_state.aba_atual = "relatorios"
 
 # Determinar aba atual pelo índice da aba selecionada
 idx_aba = [v for v in tabs.values()].index(aba_selecionada)
