@@ -153,7 +153,13 @@ with tab1:
     st.subheader(t("gestao_funcionarios"))
     
     # Busca direta ao banco de dados (sem cache)
-    funcionarios = pd.DataFrame(supabase.table("funcionarios").select("*").order("id").execute().data)
+    funcionarios = pd.DataFrame(
+        supabase.table("funcionarios")
+        .select("*")
+        .order("id")
+        .execute()
+        .data
+    )
 
     with st.form("form_funcionario", clear_on_submit=True):
         nome = st.text_input(t("nome"))
@@ -198,11 +204,21 @@ with tab2:
     st.subheader(t("gestao_ferias"))
     
     # Busca direta ao banco de dados (sem cache)
-    funcionarios_ferias = pd.DataFrame(supabase.table("funcionarios").select("id", "nome", "dias_ferias").execute().data)
+    funcionarios_ferias = pd.DataFrame(
+        supabase.table("funcionarios")
+        .select("id", "nome", "dias_ferias")
+        .execute()
+        .data
+    )
     
-    ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(nome)").order("data_inicio", desc=True).execute().data)
-    st.dataframe(ferias)
-    
+    ferias = pd.DataFrame(
+        supabase.table("ferias")
+        .select("*", "funcionarios(nome)")
+        .order("data_inicio", desc=True)
+        .execute()
+        .data
+    )
+
     if not funcionarios_ferias.empty:
         with st.form("marcar_ferias", clear_on_submit=True):
             funcionario_id = st.selectbox(
@@ -296,9 +312,13 @@ with tab3:
     st.subheader(t("relatorios_ferias"))
     
     # Busca direta ao banco de dados (sem cache)
-    dados_ferias = pd.DataFrame(supabase.table("ferias").select("*", "funcionarios(id, nome, dias_ferias)").execute().data)
-    st.dataframe(dados_ferias)
-    
+    dados_ferias = pd.DataFrame(
+        supabase.table("ferias")
+        .select("*", "funcionarios(id, nome, dias_ferias)")
+        .execute()
+        .data
+    )
+
     if not dados_ferias.empty:
         dados_ferias['data_inicio'] = pd.to_datetime(dados_ferias['data_inicio']).dt.date
         dados_ferias['data_fim'] = pd.to_datetime(dados_ferias['data_fim']).dt.date
