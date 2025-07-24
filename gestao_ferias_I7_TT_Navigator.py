@@ -51,39 +51,37 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- Controle das abas ---
-if "aba_atual" not in st.session_state:
-    st.session_state.aba_atual = "funcionarios"
+# --- Página ---
+st.set_page_config(page_title=t("titulo"), layout="wide")
+st.title(t("titulo"))
 
+# --- Controle de abas ---
 tabs = {
     "funcionarios": t("gestao_funcionarios"),
     "ferias": t("gestao_ferias"),
     "relatorios": t("relatorios_ferias")
 }
-
 abas = st.tabs(list(tabs.values()))
 
-if abas[0]:
+# Determina aba ativa com base na posição
+if "aba_atual" not in st.session_state:
     st.session_state.aba_atual = "funcionarios"
-elif abas[1]:
-    st.session_state.aba_atual = "ferias"
-elif abas[2]:
-    st.session_state.aba_atual = "relatorios"
-
-# Determinar aba atual pelo índice da aba selecionada
-idx_aba = [v for v in tabs.values()].index(aba_selecionada)
-nome_aba = list(tabs.keys())[idx_aba]
-st.session_state.aba_atual = nome_aba
+for i, aba in enumerate(abas):
+    with aba:
+        if i == 0:
+            st.session_state.aba_atual = "funcionarios"
+        elif i == 1:
+            st.session_state.aba_atual = "ferias"
+        elif i == 2:
+            st.session_state.aba_atual = "relatorios"
+        break
 
 # --- Flags para recarregar dados ---
-if "reload_funcionarios" not in st.session_state:
-    st.session_state.reload_funcionarios = True
-if "reload_ferias" not in st.session_state:
-    st.session_state.reload_ferias = True
-if "reload_config" not in st.session_state:
-    st.session_state.reload_config = True
+for flag in ["reload_funcionarios", "reload_ferias", "reload_config"]:
+    if flag not in st.session_state:
+        st.session_state[flag] = True
 
-# --- Funções para carregar dados ---
+# --- Funções de carregamento ---
 def carregar_funcionarios():
     return pd.DataFrame(supabase.table("funcionarios").select("*").order("id").execute().data)
 
@@ -94,16 +92,11 @@ def carregar_config():
     res = supabase.table("configuracoes").select("max_ferias_simultaneas").eq("id", 1).single().execute()
     return res.data['max_ferias_simultaneas'] if res.data else 5
 
-# --- Página ---
-st.set_page_config(page_title=t("titulo"), layout="wide")
-st.title(t("titulo"))
-
-# --- Sidebar: configurações ---
+# --- Sidebar Configurações ---
 with st.sidebar:
     st.header(t("configuracoes"))
     if st.session_state.reload_config:
-        max_ferias = carregar_config()
-        st.session_state.max_ferias_simultaneas = max_ferias
+        st.session_state.max_ferias_simultaneas = carregar_config()
         st.session_state.reload_config = False
 
     novo_max = st.number_input(t("max_ferias_simultaneas"), min_value=1, value=st.session_state.max_ferias_simultaneas)
@@ -112,16 +105,13 @@ with st.sidebar:
         st.success(t("config_atualizada"))
         st.session_state.max_ferias_simultaneas = novo_max
         st.session_state.reload_config = True
-        # Atualizar abas para refletir alteração se necessário
 
 # --- Aba Funcionários ---
 if st.session_state.aba_atual == "funcionarios":
     st.subheader(t("gestao_funcionarios"))
-
     if st.session_state.reload_funcionarios:
         st.session_state.funcionarios = carregar_funcionarios()
         st.session_state.reload_funcionarios = False
-
     funcionarios = st.session_state.funcionarios
 
     with st.form("form_adicionar_funcionario", clear_on_submit=True):
@@ -140,11 +130,11 @@ if st.session_state.aba_atual == "funcionarios":
     st.dataframe(funcionarios)
 
     for _, row in funcionarios.iterrows():
-        with st.expander(f"{row['nome']}"):
+        with st.expander(row["nome"]):
             with st.form(f"form_editar_{row['id']}"):
-                novo_nome = st.text_input(t("nome"), value=row['nome'])
-                nova_data = st.date_input(t("data_admissao"), value=pd.to_datetime(row['data_admissao']))
-                novos_dias = st.number_input(t("dias_ferias_ano"), min_value=1, value=row['dias_ferias'])
+                novo_nome = st.text_input(t("nome"), value=row["nome"])
+                nova_data = st.date_input(t("data_admissao"), value=pd.to_datetime(row["data_admissao"]))
+                novos_dias = st.number_input(t("dias_ferias_ano"), min_value=1, value=row["dias_ferias"])
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.form_submit_button(t("atualizar")):
@@ -152,19 +142,18 @@ if st.session_state.aba_atual == "funcionarios":
                             "nome": novo_nome,
                             "data_admissao": nova_data.isoformat(),
                             "dias_ferias": novos_dias
-                        }).eq("id", row['id']).execute()
+                        }).eq("id", row["id"]).execute()
                         st.success(t("atualizado"))
                         st.session_state.reload_funcionarios = True
                 with col2:
                     if st.form_submit_button(t("apagar")):
-                        supabase.table("funcionarios").delete().eq("id", row['id']).execute()
+                        supabase.table("funcionarios").delete().eq("id", row["id"]).execute()
                         st.warning(t("removido"))
                         st.session_state.reload_funcionarios = True
 
 # --- Aba Férias ---
 elif st.session_state.aba_atual == "ferias":
     st.subheader(t("gestao_ferias"))
-
     if st.session_state.reload_funcionarios:
         st.session_state.funcionarios = carregar_funcionarios()
         st.session_state.reload_funcionarios = False
@@ -179,8 +168,8 @@ elif st.session_state.aba_atual == "ferias":
         with st.form("form_marcar_ferias", clear_on_submit=True):
             funcionario_id = st.selectbox(
                 t("nome"),
-                funcionarios_ferias['id'],
-                format_func=lambda x: funcionarios_ferias.loc[funcionarios_ferias['id'] == x, 'nome'].values[0]
+                funcionarios_ferias["id"],
+                format_func=lambda x: funcionarios_ferias.loc[funcionarios_ferias["id"] == x, "nome"].values[0]
             )
             data_inicio = st.date_input(t("inicio"))
             data_fim = st.date_input(t("fim"))
@@ -198,50 +187,48 @@ elif st.session_state.aba_atual == "ferias":
     for _, row in ferias.iterrows():
         with st.expander(f"{row['funcionarios']['nome']} {row['data_inicio']} - {row['data_fim']}"):
             with st.form(f"form_editar_ferias_{row['id']}"):
-                novo_inicio = st.date_input(t("inicio"), value=pd.to_datetime(row['data_inicio']))
-                novo_fim = st.date_input(t("fim"), value=pd.to_datetime(row['data_fim']))
+                novo_inicio = st.date_input(t("inicio"), value=pd.to_datetime(row["data_inicio"]))
+                novo_fim = st.date_input(t("fim"), value=pd.to_datetime(row["data_fim"]))
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.form_submit_button(t("atualizar")):
                         supabase.table("ferias").update({
                             "data_inicio": novo_inicio.isoformat(),
                             "data_fim": novo_fim.isoformat()
-                        }).eq("id", row['id']).execute()
+                        }).eq("id", row["id"]).execute()
                         st.success(t("ferias_atualizadas"))
                         st.session_state.reload_ferias = True
                 with col2:
                     if st.form_submit_button(t("apagar")):
-                        supabase.table("ferias").delete().eq("id", row['id']).execute()
+                        supabase.table("ferias").delete().eq("id", row["id"]).execute()
                         st.warning(t("ferias_removidas"))
                         st.session_state.reload_ferias = True
 
 # --- Aba Relatórios ---
 elif st.session_state.aba_atual == "relatorios":
     st.subheader(t("relatorios_ferias"))
-
     if st.session_state.reload_ferias:
         st.session_state.ferias = carregar_ferias()
         st.session_state.reload_ferias = False
     ferias = st.session_state.ferias
 
     if not ferias.empty:
-        ferias['data_inicio'] = pd.to_datetime(ferias['data_inicio'])
-        ferias['data_fim'] = pd.to_datetime(ferias['data_fim'])
-        ferias['funcionario'] = ferias['funcionarios'].apply(lambda x: x.get('nome', '') if isinstance(x, dict) else '')
+        ferias["data_inicio"] = pd.to_datetime(ferias["data_inicio"])
+        ferias["data_fim"] = pd.to_datetime(ferias["data_fim"])
+        ferias["funcionario"] = ferias["funcionarios"].apply(lambda x: x.get("nome", "") if isinstance(x, dict) else "")
 
         st.subheader(t("ferias_marcadas_titulo"))
-        st.dataframe(ferias[['funcionario', 'data_inicio', 'data_fim']])
+        st.dataframe(ferias[["funcionario", "data_inicio", "data_fim"]])
 
         fig, ax = plt.subplots(figsize=(14, 6))
-        all_dates = pd.date_range(start=ferias['data_inicio'].min(), end=ferias['data_fim'].max())
+        all_dates = pd.date_range(start=ferias["data_inicio"].min(), end=ferias["data_fim"].max())
         congestion = pd.Series(0, index=all_dates)
         for _, row in ferias.iterrows():
-            inicio = pd.to_datetime(row['data_inicio'])
-            fim = pd.to_datetime(row['data_fim'])
-            mask = (all_dates >= inicio) & (all_dates <= fim)
-            congestion[mask] += 1
+            inicio = row["data_inicio"]
+            fim = row["data_fim"]
+            congestion[(all_dates >= inicio) & (all_dates <= fim)] += 1
 
-        ax.plot(congestion.index, congestion.values, label=t("sobreposicao"), color='red')
+        ax.plot(congestion.index, congestion.values, label=t("sobreposicao"), color="red")
         ax.set_title(t("titulo_grafico"))
         ax.set_xlabel(t("data"))
         ax.set_ylabel(t("numero_funcionarios_ferias"))
@@ -253,9 +240,9 @@ elif st.session_state.aba_atual == "relatorios":
 
 # --- Footer ---
 with st.sidebar:
-    st.markdown("""
+    st.markdown(\"\"\"
         <div style='height:300px;'></div>
         <div style='font-size:10px; text-align:center;'>
             Powered by NN ®
         </div>
-    """, unsafe_allow_html=True)
+    \"\"\", unsafe_allow_html=True)
