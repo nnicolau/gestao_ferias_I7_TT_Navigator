@@ -240,9 +240,12 @@ elif st.session_state.aba_atual == "relatorios":
 
 # --- Footer ---
 with st.sidebar:
-    st.markdown(\"\"\"
+    st.markdown(
+        """
         <div style='height:300px;'></div>
         <div style='font-size:10px; text-align:center;'>
             Powered by NN ®
         </div>
-    \"\"\", unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
