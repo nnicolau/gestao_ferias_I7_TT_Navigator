@@ -37,15 +37,22 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- Autenticação ---
 def check_password():
-    if 'authenticated' in st.session_state and st.session_state.authenticated:
+    if st.session_state.get("authenticated", False):
         return True
-    password = st.text_input(t("senha_acesso"), type="password", key="password_input")
-    if password:
-        if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
-            st.session_state.authenticated = True
-            return True
-        else:
-            st.error(t("senha_incorreta"))
+
+    # Exibir formulário de autenticação
+    with st.form("login_form"):
+        password = st.text_input(t("senha_acesso"), type="password")
+        submit = st.form_submit_button(t("entrar"))
+
+        if submit:
+            if bcrypt.checkpw(password.encode(), PASSWORD_HASH.encode()):
+                st.session_state.authenticated = True
+                st.success(t("autenticado"))
+                st.rerun()
+            else:
+                st.error(t("senha_incorreta"))
+
     return False
 
 if not check_password():
