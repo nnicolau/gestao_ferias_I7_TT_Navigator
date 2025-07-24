@@ -40,7 +40,6 @@ def check_password():
     if st.session_state.get("authenticated", False):
         return True
 
-    # Exibir formulário de autenticação
     with st.form("login_form"):
         password = st.text_input(t("senha_acesso"), type="password")
         submit = st.form_submit_button(t("entrar"))
@@ -68,20 +67,8 @@ tabs = {
     "ferias": t("gestao_ferias"),
     "relatorios": t("relatorios_ferias")
 }
-abas = st.tabs(list(tabs.values()))
 
-# Determina aba ativa com base na posição
-if "aba_atual" not in st.session_state:
-    st.session_state.aba_atual = "funcionarios"
-for i, aba in enumerate(abas):
-    with aba:
-        if i == 0:
-            st.session_state.aba_atual = "funcionarios"
-        elif i == 1:
-            st.session_state.aba_atual = "ferias"
-        elif i == 2:
-            st.session_state.aba_atual = "relatorios"
-        break
+aba_selecionada = st.selectbox("Menu", options=list(tabs.keys()), format_func=lambda x: tabs[x], key="aba_atual")
 
 # --- Flags para recarregar dados ---
 for flag in ["reload_funcionarios", "reload_ferias", "reload_config"]:
@@ -114,7 +101,7 @@ with st.sidebar:
         st.session_state.reload_config = True
 
 # --- Aba Funcionários ---
-if st.session_state.aba_atual == "funcionarios":
+if aba_selecionada == "funcionarios":
     st.subheader(t("gestao_funcionarios"))
     if st.session_state.reload_funcionarios:
         st.session_state.funcionarios = carregar_funcionarios()
@@ -159,7 +146,7 @@ if st.session_state.aba_atual == "funcionarios":
                         st.session_state.reload_funcionarios = True
 
 # --- Aba Férias ---
-elif st.session_state.aba_atual == "ferias":
+elif aba_selecionada == "ferias":
     st.subheader(t("gestao_ferias"))
     if st.session_state.reload_funcionarios:
         st.session_state.funcionarios = carregar_funcionarios()
@@ -212,7 +199,7 @@ elif st.session_state.aba_atual == "ferias":
                         st.session_state.reload_ferias = True
 
 # --- Aba Relatórios ---
-elif st.session_state.aba_atual == "relatorios":
+elif aba_selecionada == "relatorios":
     st.subheader(t("relatorios_ferias"))
     if st.session_state.reload_ferias:
         st.session_state.ferias = carregar_ferias()
